@@ -28,17 +28,15 @@ import org.platanios.tensorflow.api.utilities.{Closeable, Disposer, NativeHandle
 import org.platanios.tensorflow.api.utilities.Proto.{Serializable => ProtoSerializable}
 import org.platanios.tensorflow.jni.{Tensor => NativeTensor}
 import org.platanios.tensorflow.jni.generated.tensors.{Sparse => NativeTensorOpsSparse}
-
 import com.google.protobuf.ByteString
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
 import org.tensorflow.framework.TensorProto
-
 import java.nio._
 import java.nio.charset.Charset
 import java.nio.file.Path
 
-import scala.collection.{TraversableLike, breakOut}
+import scala.collection.{TraversableLike, breakOut, mutable}
 import scala.language.{higherKinds, postfixOps}
 import scala.util.DynamicVariable
 
@@ -148,6 +146,7 @@ class Tensor private[Tensor](
 ) extends TensorLike
         with Closeable
         with ProtoSerializable {
+
   /** Lock for the native handle. */
   private[api] def NativeHandleLock = nativeHandleWrapper.Lock
 
@@ -215,6 +214,8 @@ class Tensor private[Tensor](
         "'Tensor.scalar' can only be called for scalar tensors (i.e., containing only one element).")
     getElementAtFlattenedIndex(0)
   }
+
+  def getBuffer: Array[Byte] = NativeTensor.buffer(resolve()).order(ByteOrder.nativeOrder).array()
 
   def entriesIterator: Iterator[dataType.ScalaType] = new Iterator[dataType.ScalaType] {
     private var resolvedHandle: Long = resolve()
@@ -350,12 +351,17 @@ class Tensor private[Tensor](
 object Tensor {
   private[tensors] val logger = Logger(LoggerFactory.getLogger("Tensor"))
 
+  val tensorMonitor: mutable.Map[Long, String] = mutable.Map()
+
   private[api] def fromNativeHandle(nativeHandle: Long): Tensor = {
+
     val nativeHandleWrapper = NativeHandleWrapper(nativeHandle)
+
     val closeFn = () => {
       nativeHandleWrapper.Lock.synchronized {
         if (nativeHandleWrapper.handle != 0) {
           NativeTensor.eagerDelete(nativeHandleWrapper.handle)
+          tensorMonitor.remove(nativeHandleWrapper.handle)
           nativeHandleWrapper.handle = 0
         }
       }
@@ -364,8 +370,13 @@ object Tensor {
     // Keep track of references in the Scala side and notify the native library when the tensor is not referenced
     // anymore anywhere in the Scala side. This will let the native library free the allocated resources and prevent a
     // potential memory leak.
+    tensorMonitor.put(nativeHandleWrapper.handle, "")
     Disposer.add(tensor, closeFn)
     tensor
+  }
+
+  def fromExternalHandle(nativeHandle: Long): Tensor = {
+   fromHostNativeHandle(nativeHandle)
   }
 
   private[api] def fromHostNativeHandle(nativeHandle: Long): Tensor = {
@@ -575,6 +586,39 @@ object Tensor {
     NativeTensor.delete(hostHandle)
     tensor
   }
+
+
+  @throws[IllegalArgumentException]
+  def fromArrayInt(data: Array[Int]): Tensor = this synchronized {
+    val hostHandle = NativeTensor.fromArrayInt(INT32.cValue, data)
+    val tensor = Tensor.fromHostNativeHandle(hostHandle)
+    NativeTensor.delete(hostHandle)
+    tensor
+  }
+
+  @throws[IllegalArgumentException]
+  def fromArrayFloat(data: Array[Float]): Tensor = this synchronized {
+    val hostHandle = NativeTensor.fromArrayFloat(FLOAT32.cValue, data)
+    val tensor = Tensor.fromHostNativeHandle(hostHandle)
+    NativeTensor.delete(hostHandle)
+    tensor
+  }
+
+  @throws[IllegalArgumentException]
+  def fromArrayBool(data: Array[Boolean]): Tensor = this synchronized {
+    val hostHandle = NativeTensor.fromArrayBool(BOOLEAN.cValue, data)
+    val tensor = Tensor.fromHostNativeHandle(hostHandle)
+    NativeTensor.delete(hostHandle)
+    tensor
+  }
+
+//  @throws[IllegalArgumentException]
+//  def fromArray(data: Array[Float]): Tensor = this synchronized {
+//    val hostHandle = NativeTensor.fromArray()
+//    val tensor = Tensor.fromHostNativeHandle(hostHandle)
+//    NativeTensor.delete(hostHandle)
+//    tensor
+//  }
 
   /** Reads the tensor stored in the provided Numpy (i.e., `.npy`) file. */
   @throws[IllegalArgumentException]

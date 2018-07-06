@@ -68,7 +68,7 @@ object RNNCell {
         throw InvalidArgumentException(s"Input must be rank-2 (provided rank-${output.rank}).")
       if (output.shape(1) == -1)
         throw InvalidArgumentException(s"Last axis of input shape (${output.shape}) must be known.")
-      val linear = NN.addBias(Math.matmul(Basic.concatenate(Seq(output, state), axis = 1), kernel), bias)
+      val linear = Math.matmul(Basic.concatenate(Seq(output, state), axis = 1), kernel) + bias
       val newOutput = activation(linear)
       Tuple(newOutput, newOutput)
     }
@@ -143,7 +143,7 @@ object RNNCell {
         throw InvalidArgumentException(s"Last axis of input shape (${output.shape}) must be known.")
       val one = ops.Basic.constant(1, INT32)
       // Parameters of gates are concatenated into one multiply for efficiency.
-      val lstmMatrix = NN.addBias(Math.matmul(Basic.concatenate(Seq(output, input.state.m), axis = 1), kernel), bias)
+      val lstmMatrix = Math.matmul(Basic.concatenate(Seq(output, input.state.m), axis = 1), kernel) + bias
       // i = input gate, j = new input, f = forget gate, o = output gate
       val lstmMatrixBlocks = Basic.splitEvenly(lstmMatrix, 4, axis = one)
       val (i, j, f, o) = (lstmMatrixBlocks(0), lstmMatrixBlocks(1), lstmMatrixBlocks(2), lstmMatrixBlocks(3))

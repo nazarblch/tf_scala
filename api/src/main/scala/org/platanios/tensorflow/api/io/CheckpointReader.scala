@@ -68,7 +68,7 @@ class CheckpointReader private[CheckpointReader] (
   def getTensor(name: String): Option[Tensor] = {
     if (nativeHandle == 0)
       throw UnavailableException("This checkpoint reader has already been disposed.")
-    Option(NativeCheckpointReader.getTensor(nativeHandle, name)).map(Tensor.fromNativeHandle)
+    Option(NativeCheckpointReader.getTensor(nativeHandle, name)).map(x => Tensor.fromNativeHandle(x))
   }
 
   /** Returns a map from variable name to shape, for all variables containing in this checkpoint. */

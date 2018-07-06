@@ -44,6 +44,7 @@ import scala.collection.JavaConverters._
   *
   * @author Emmanouil Antonios Platanios
   */
+//TODO: convert to long
 final class Shape private (private val array: Array[Int]) extends ProtoSerializable {
   /** Returns a boolean value indicating whether this shape is fully defined.
     *
@@ -335,7 +336,7 @@ final class Shape private (private val array: Array[Int]) extends ProtoSerializa
     if (rank == 0)
       Tensor(dataType)
     else
-      Tensor(dataType, asArray.head, asArray.tail: _*)
+      Tensor.fromArrayInt(asArray).cast(dataType)
   }
 
   /** Converts this shape to a one-dimensional "symbolic" tensor (i.e., a constant-valued op output).

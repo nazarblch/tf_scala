@@ -17,6 +17,8 @@ package org.platanios.tensorflow.api.ops.rnn.cell
 
 import org.platanios.tensorflow.api.core.Shape
 import org.platanios.tensorflow.api.ops.{Math, Output}
+import org.platanios.tensorflow.api._
+import org.platanios.tensorflow.jni.InvalidArgumentException
 
 /** $OpDocRNNCellBasicLSTMCell
   *
@@ -36,7 +38,16 @@ class BasicLSTMCell protected (
     val forgetBias: Float = 1.0f,
     val name: String = "BasicLSTMCell"
 ) extends RNNCell[Output, Shape, LSTMState, (Shape, Shape)] {
-  private[this] val numUnits = bias.shape(0) / 4
+
+  if (bias.shape(0) != 1) {
+    throw InvalidArgumentException(s"bias should be row (bias.shape(0) = ${bias.shape(0)} != 1).")
+  }
+
+  if (bias.shape(1) != kernel.shape(1)) {
+    throw InvalidArgumentException(s"bias.shape(1) = ${bias.shape(1)} should be equal kernel.shape(1) = ${kernel.shape(1)} .")
+  }
+
+  private[this] val numUnits = bias.shape(1) / 4
 
   override def outputShape: Shape = Shape(numUnits)
   override def stateShape: (Shape, Shape) = (Shape(numUnits), Shape(numUnits))
@@ -55,5 +66,11 @@ object BasicLSTMCell {
       name: String = "BasicLSTMCell"
   ): BasicLSTMCell = {
     new BasicLSTMCell(kernel, bias, activation, forgetBias, name)
+  }
+
+  def apply(shape: (Int, Int), name: String): BasicLSTMCell = {
+    val W = tf.variable(name + "_W", FLOAT32, Shape(shape._1, 4 * shape._2))
+    val b = tf.variable(name + "_b", FLOAT32, Shape(1, 4 * shape._2))
+    BasicLSTMCell(W, b)
   }
 }

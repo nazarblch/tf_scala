@@ -30,6 +30,8 @@ import java.nio.charset.StandardCharsets
 import scala.language.postfixOps
 import scala.util.DynamicVariable
 
+
+
 /** Contains functions for executing ops related to basic tensor manipulation.
   *
   * @author Emmanouil Antonios Platanios
@@ -159,7 +161,7 @@ private[api] trait Basic {
       input: Tensor, number: Int = -1, axis: Int = 0): Seq[Tensor] = {
     val num: Int = if (number >= 0) number else input.shape(axis)
     NativeTensorOpsBasic.unpack(
-      executionContext.value.nativeHandle, input.nativeHandle, num, axis).map(Tensor.fromNativeHandle)
+      executionContext.value.nativeHandle, input.nativeHandle, num, axis).map(x => Tensor.fromNativeHandle(x))
   }
 
   /** $OpDocBasicConcatenate
@@ -190,7 +192,7 @@ private[api] trait Basic {
       shapes: Seq[Tensor], axis: Tensor): Seq[Tensor] = {
     NativeTensorOpsBasic.concatOffset(
       executionContext.value.nativeHandle, axis.nativeHandle, shapes.map(_.nativeHandle).toArray)
-        .map(Tensor.fromNativeHandle)
+        .map(x => Tensor.fromNativeHandle(x))
   }
 
   /** $OpDocBasicSplitEvenly
@@ -205,7 +207,7 @@ private[api] trait Basic {
       input: Tensor, numSplits: Int, axis: Tensor = 0): Seq[Tensor] = {
     NativeTensorOpsBasic.split(
       executionContext.value.nativeHandle, axis.nativeHandle, input.nativeHandle, numSplits.toLong)
-        .map(Tensor.fromNativeHandle)
+        .map(x => Tensor.fromNativeHandle(x))
   }
 
   /** $OpDocBasicSplit
@@ -221,7 +223,7 @@ private[api] trait Basic {
     NativeTensorOpsBasic.splitV(
       executionContext.value.nativeHandle, input.nativeHandle, splitSizes.nativeHandle,
       axis.nativeHandle, splitSizes.shape(0))
-        .map(Tensor.fromNativeHandle)
+        .map(x => Tensor.fromNativeHandle(x))
   }
 
   /** $OpDocBasicTile
@@ -613,7 +615,7 @@ private[api] trait Basic {
     */
   def unique(input: Tensor, indicesDataType: DataType = INT32): (Tensor, Tensor) = {
     val tensors = NativeTensorOpsBasic.unique(
-      executionContext.value.nativeHandle, input.nativeHandle, indicesDataType.cValue).map(Tensor.fromNativeHandle)
+      executionContext.value.nativeHandle, input.nativeHandle, indicesDataType.cValue).map(x => Tensor.fromNativeHandle(x))
     (tensors(0), tensors(1))
   }
 
@@ -627,7 +629,7 @@ private[api] trait Basic {
     */
   def uniqueWithCounts(input: Tensor, indicesDataType: DataType = INT32): (Tensor, Tensor, Tensor) = {
     val tensors = NativeTensorOpsBasic.uniqueWithCounts(
-      executionContext.value.nativeHandle, input.nativeHandle, indicesDataType.cValue).map(Tensor.fromNativeHandle)
+      executionContext.value.nativeHandle, input.nativeHandle, indicesDataType.cValue).map(x => Tensor.fromNativeHandle(x))
     (tensors(0), tensors(1), tensors(2))
   }
 
@@ -647,7 +649,7 @@ private[api] trait Basic {
   ): (Tensor, Tensor) = {
     val tensors = NativeTensorOpsBasic.listDiff(
       executionContext.value.nativeHandle, x.nativeHandle, y.nativeHandle,
-      indicesDataType.cValue).map(Tensor.fromNativeHandle)
+      indicesDataType.cValue).map(x => Tensor.fromNativeHandle(x))
     (tensors(0), tensors(1))
   }
 
@@ -968,7 +970,11 @@ object Basic extends Basic {
       * @param  shape Shape of the output tensor.
       * @return Result as a new tensor.
       */
-    def reshape[T: TensorConvertible](shape: T): Tensor = Basic.reshape(tensor, shape)
+    def reshape[T: TensorConvertible](shape: T): Tensor = {
+      val res = Basic.reshape(tensor, shape)
+      tensor.close()
+      res
+    }
 
     /** $OpDocBasicTranspose
       *
@@ -1217,6 +1223,9 @@ object Basic extends Basic {
       val result = Basic.stridedSlice(
         tensor, beginTensor, endTensor, stridesTensor, stridedSlice._4, stridedSlice._5, stridedSlice._6,
         stridedSlice._7, stridedSlice._8)
+      beginTensor.close()
+      endTensor.close()
+      stridesTensor.close()
       result
     }
 

@@ -57,7 +57,7 @@ private[api] trait Callback {
       evOutput: Callback.ArgType.Aux[R, RS, RD]
   ): RS = {
     val id = NativeCallbacksRegistry.register(inputs => {
-      val inputTensors = inputs.map(Tensor.fromNativeHandle).toSeq
+      val inputTensors = inputs.map(x => Tensor.fromNativeHandle(x)).toSeq
       val outputs = function(evInput.decode(inputTensors))
       val outputTensors = evOutput.tensors(outputs)
       outputTensors.map(_.nativeHandle).toArray

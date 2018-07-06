@@ -20,8 +20,9 @@ import org.platanios.tensorflow.api.ops.{Op, Output}
 import org.platanios.tensorflow.api.tensors.Tensor
 import org.platanios.tensorflow.api.utilities.{Closeable, Disposer, NativeHandleWrapper}
 import org.platanios.tensorflow.jni.{Session => NativeSession, Tensor => NativeTensor}
-
 import org.tensorflow.framework.{RunMetadata, RunOptions}
+
+import scala.collection.mutable.ArrayBuffer
 
 /** Sessions provide the client interface for interacting with TensorFlow computations.
   *
@@ -40,6 +41,25 @@ class Session private[api](
     private[api] val nativeHandleWrapper: NativeHandleWrapper,
     override protected val closeFn: () => Unit
 ) extends Closeable {
+
+  private val feedNativeReferences: ArrayBuffer[Tensor] = ArrayBuffer()
+  private val fetchNativeReferences: ArrayBuffer[Tensor] = ArrayBuffer()
+
+  def deleteFeedNativeReferences(): Unit = {
+    feedNativeReferences.foreach(_.close())
+    feedNativeReferences.clear()
+  }
+
+  def deleteFetchNativeReferences(): Unit = {
+    fetchNativeReferences.foreach(_.close())
+    fetchNativeReferences.clear()
+  }
+
+  def deleteNativeReferences(): Unit = {
+    deleteFeedNativeReferences()
+    deleteFetchNativeReferences()
+  }
+
   val graph: Graph = graphReference.graph
 
   /** Lock for the native handle. */
@@ -122,6 +142,7 @@ class Session private[api](
       throw new IllegalStateException("This session has already been closed.")
     extend()
     val (inputs, inputTensors) = feeds.values.toSeq.unzip
+    feedNativeReferences ++= inputTensors
     val inputTensorHandles: Array[Long] = inputTensors.map(_.resolve()).toArray
     val inputOpHandles: Array[Long] = inputs.map(_.op.nativeHandle).toArray
     val inputOpIndices: Array[Int] = inputs.map(_.index).toArray
@@ -150,9 +171,12 @@ class Session private[api](
       val outputs: R = resultsBuilder(outputTensorHandles.map(handle => {
         val tensor = Tensor.fromHostNativeHandle(handle)
         NativeTensor.delete(handle)
+        fetchNativeReferences.append(tensor)
         tensor
       }))
-      inputTensorHandles.foreach(NativeTensor.delete)
+      //TODO: input object deleted after session
+      // inputTensorHandles.foreach(h => {NativeTensor.delete(h)})
+
       (outputs, Option(metadata).map(RunMetadata.parseFrom))
     } catch {
       case t: Throwable =>

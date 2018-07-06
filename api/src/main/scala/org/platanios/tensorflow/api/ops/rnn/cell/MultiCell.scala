@@ -15,6 +15,8 @@
 
 package org.platanios.tensorflow.api.ops.rnn.cell
 
+import org.platanios.tensorflow.api.core.Shape
+import org.platanios.tensorflow.api.core.exception.InvalidArgumentException
 import org.platanios.tensorflow.api.ops.Op
 import org.platanios.tensorflow.api.ops.control_flow.WhileLoopVariable
 
@@ -31,16 +33,24 @@ import org.platanios.tensorflow.api.ops.control_flow.WhileLoopVariable
   *
   * @author Emmanouil Antonios Platanios
   */
-class MultiCell[O, OS, S, SS] protected (
+class MultiCell[O, OS, S, SS] protected(
     val cells: Seq[RNNCell[O, OS, S, SS]],
     val name: String = "MultiCell"
 )(implicit
     evO: WhileLoopVariable.Aux[O, OS],
     evS: WhileLoopVariable.Aux[S, SS]
 ) extends RNNCell[O, OS, Seq[S], Seq[SS]] {
+
+  // TODO: check cells sizes correspondence
+
   override def outputShape: OS = cells.last.outputShape
   override def stateShape: Seq[SS] = cells.map(_.stateShape)
   override def forward(input: Tuple[O, Seq[S]]): Tuple[O, Seq[S]] = Op.createWithNameScope(name) {
+
+    if (input.state.size != cells.size) {
+      throw InvalidArgumentException(s"Initialize states count (${input.state.size}) != cells count (${cells.size}).")
+    }
+
     var currentInput = input.output
     val state = cells.zip(input.state).map {
       case (cell, s) =>
