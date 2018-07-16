@@ -19,6 +19,7 @@ import sbtrelease.Vcs
 
 import scala.sys.process.Process
 
+
 scalaVersion in ThisBuild := "2.12.6"
 crossScalaVersions in ThisBuild := Seq("2.11.11", "2.12.6")
 
@@ -29,7 +30,14 @@ val circeVersion = "0.9.1" // Use for working with JSON.
 
 autoCompilerPlugins in ThisBuild := true
 
-// addCompilerPlugin(MetalsPlugin.semanticdbScalac)
+
+
+// Some dependencies like `javacpp` are packaged with maven-plugin packaging
+classpathTypes += "maven-plugin"
+
+unmanagedResourceDirectories in Compile += baseDirectory.value / "so"
+includeFilter in (Compile, unmanagedResourceDirectories):= "*.so"
+
 
 scalacOptions in ThisBuild ++= Seq(
   "-deprecation",
@@ -166,6 +174,13 @@ lazy val jni = (project in file("./jni"))
       tfLibRepositoryBranch in JniCross := "master",
       // Specify the order in which the different compilation tasks are executed
       nativeCompile := nativeCompile.dependsOn(generateTensorOps).value)
+      .settings(
+        libraryDependencies ++= Seq(
+          "commons-lang" % "commons-lang" % "2.6",
+          "org.bytedeco" % "javacpp" % "1.4.1"),
+        unmanagedResourceDirectories in Compile += new File("/home/nazar/tensorflow_scala/so"),
+        includeFilter in (Compile, unmanagedResourceDirectories):= ".so"
+      )
 
 lazy val api = (project in file("./api"))
     .dependsOn(jni)
@@ -176,6 +191,7 @@ lazy val api = (project in file("./api"))
     .settings(publishSettings)
     .settings(
       libraryDependencies ++= Seq(
+        "org.bytedeco" % "javacpp" % "1.4.1",
         "org.typelevel" %% "spire" % "0.14.1",
         "org.tensorflow" % "proto" % tensorFlowVersion,
         "com.chuusai" %% "shapeless" % "2.3.3",
@@ -191,7 +207,10 @@ lazy val api = (project in file("./api"))
       sourceDirectory in ProtobufConfig := sourceDirectory.value / "main" / "proto",
       javaSource in ProtobufConfig := ((sourceDirectory in Compile).value / "generated" / "java"),
       sourceDirectories in Compile += sourceDirectory.value / "main" / "generated" / "java",
-      unmanagedResourceDirectories in Compile += (sourceDirectory in ProtobufConfig).value)
+      unmanagedResourceDirectories in Compile += (sourceDirectory in ProtobufConfig).value,
+      unmanagedResourceDirectories in Compile += new File("/home/nazar/tensorflow_scala/so"),
+      includeFilter in (Compile, unmanagedResourceDirectories):= ".so"
+    )
 
 lazy val tpu = (project in file("./tpu"))
     .dependsOn(jni, api)
@@ -433,3 +452,5 @@ lazy val publishSettings = Seq(
           s"${Opts.resolver.sonatypeSnapshots.root}/${organization.value.replace(".", "/")}/" :: Nil) ! streams.value.log
   }
 )
+
+

@@ -17,7 +17,7 @@ package org.platanios.tensorflow.api.core.client
 
 import org.platanios.tensorflow.api.core.Graph
 import org.platanios.tensorflow.api.ops.{Op, Output}
-import org.platanios.tensorflow.api.tensors.Tensor
+import org.platanios.tensorflow.api.tensors.{ClassicTensor, Tensor}
 import org.platanios.tensorflow.api.utilities.{Closeable, Disposer, NativeHandleWrapper}
 import org.platanios.tensorflow.jni.{Session => NativeSession, Tensor => NativeTensor}
 import org.tensorflow.framework.{RunMetadata, RunOptions}
@@ -143,7 +143,7 @@ class Session private[api](
     extend()
     val (inputs, inputTensors) = feeds.values.toSeq.unzip
     feedNativeReferences ++= inputTensors
-    val inputTensorHandles: Array[Long] = inputTensors.map(_.resolve()).toArray
+    val inputTensorHandles: Array[ClassicTensor] = inputTensors.map(_.resolve()).toArray
     val inputOpHandles: Array[Long] = inputs.map(_.op.nativeHandle).toArray
     val inputOpIndices: Array[Int] = inputs.map(_.index).toArray
     val (uniqueFetches, resultsBuilder) = Fetchable.process(fetches)(fetchable)
@@ -160,7 +160,7 @@ class Session private[api](
       val metadata: Array[Byte] = NativeSession.run(
         handle = nativeHandle,
         runOptions = options.map(_.toByteArray).getOrElse(Array.empty[Byte]),
-        inputTensorHandles = inputTensorHandles,
+        inputTensorHandles = inputTensorHandles.map(_.getHandleAddress),
         inputOpHandles = inputOpHandles,
         inputOpIndices = inputOpIndices,
         outputOpHandles = outputOpHandles,
@@ -176,6 +176,7 @@ class Session private[api](
       }))
       //TODO: input object deleted after session
       // inputTensorHandles.foreach(h => {NativeTensor.delete(h)})
+      inputTensorHandles.foreach(_.close())
 
       (outputs, Option(metadata).map(RunMetadata.parseFrom))
     } catch {

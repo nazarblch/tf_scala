@@ -7,6 +7,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+JNIEXPORT jstring JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_typeidName(
+    JNIEnv*, jobject, jlong);
+
 /*
  * Class:     org_platanios_tensorflow_jni_Tensor__
  * Method:    allocate
@@ -22,6 +26,16 @@ JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_allocate
  */
 JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromBuffer
   (JNIEnv *, jobject, jint, jlongArray, jlong, jobject);
+
+
+JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromArrayInt
+  (JNIEnv *, jobject, jint, jintArray);
+
+JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromArrayFloat
+  (JNIEnv *, jobject, jint, jfloatArray);
+
+JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromArrayBool
+  (JNIEnv *, jobject, jint, jbooleanArray);
 
 ///*
 // * Class:     org_platanios_tensorflow_jni_Tensor__

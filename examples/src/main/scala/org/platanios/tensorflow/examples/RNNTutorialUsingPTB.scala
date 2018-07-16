@@ -37,7 +37,7 @@ object RNNTutorialUsingPTB {
 
   val dataType              : DataType = FLOAT32
   val vocabularySize        : Int      = 10000
-  val numHidden             : Int      = 200
+  val numHidden             : Int      = 20
   val numLayers             : Int      = 1
   val dropoutKeepProbability: Float    = 0.5f
 
@@ -62,9 +62,8 @@ object RNNTutorialUsingPTB {
       "DropoutCell", BasicLSTMCell("LSTMCell", numHidden, FLOAT32, forgetBias = 0.0f), 0.00001f)
     // TODO: Add multi-RNN cell.
     val rnn = RNN("RNN", rnnCell, timeMajor = false)
-    val layer = tf.learn.device("/device:CPU:0") {
-      tf.learn.Embedding("Embedding", vocabularySize, numHidden, dataType)
-    } >> tf.learn.Dropout("Embedding/Dropout", dropoutKeepProbability) >> rnn >> RNNOutputLayer
+    val layer = tf.learn.Embedding("Embedding", vocabularySize, numHidden, dataType) >>
+      tf.learn.Dropout("Embedding/Dropout", dropoutKeepProbability) >> rnn >> RNNOutputLayer
     val loss = tf.learn.SequenceLoss("Loss/SequenceLoss", averageAcrossTimeSteps = false, averageAcrossBatch = true) >>
         tf.learn.Sum("Loss/Sum") >>
         tf.learn.ScalarSummary("Loss/Summary", "Loss")

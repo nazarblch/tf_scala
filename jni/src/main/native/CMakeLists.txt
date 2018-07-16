@@ -21,10 +21,11 @@ include_directories(./generated)
 include_directories(./include)
 include_directories(./include/third_party)
 include_directories(./ops)
+include_directories(./cjava)
 include_directories(${JNI_INCLUDE_DIRS})
 
 # Find Native TensorFlow Library to link
-find_library(LIB_TENSORFLOW tensorflow HINTS ENV LD_LIBRARY_PATH)
+find_library(LIB_TENSORFLOW tensorflow_cc HINTS ENV LD_LIBRARY_PATH)
 if(NOT LIB_TENSORFLOW)
   message(FATAL_ERROR "Library `tensorflow` not found.")
 endif()
@@ -39,6 +40,7 @@ endif()
 file(GLOB JNI_LIB_SRC
   "*.cc"
   "generated/*.cc"
+  "cjava/*.cc"
   "include/tensorflow/c/*.cc"
   "include/tensorflow/core/distributed_runtime/server_lib.cc"
 )

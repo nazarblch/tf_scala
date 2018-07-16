@@ -21,6 +21,7 @@ limitations under the License.
 // stable and can change without notice.
 
 #include "tensorflow/c/c_api.h"
+#include "tensorflow/core/framework/tensor.h"
 
 // Macro to control visibility of exported symbols in the shared library (.so,
 // .dylib, .dll).
@@ -191,6 +192,45 @@ TF_CAPI_EXPORT extern TFE_TensorHandle* TFE_TensorHandleCopyToDevice(
     TFE_TensorHandle* h, TFE_Context* ctx, const char* device_name,
     TF_Status* status);
 
+// Debugging/Profiling information for TFE_TensorHandle
+//
+// TFE_TensorDebugInfo contains information useful for debugging and
+// profiling tensors.
+typedef struct TFE_TensorDebugInfo TFE_TensorDebugInfo;
+
+// Retrieves TFE_TensorDebugInfo for `handle`.
+// If TFE_TensorHandleTensorDebugInfo succeeds, `status` is set to OK and caller
+// is responsible for deleting returned TFE_TensorDebugInfo.
+// If TFE_TensorHandleTensorDebugInfo fails, `status` is set to appropriate
+// error and nullptr is returned. This function can block till the operation
+// that produces `handle` has completed.
+TF_CAPI_EXPORT extern TFE_TensorDebugInfo* TFE_TensorHandleTensorDebugInfo(
+    TFE_TensorHandle* handle, TF_Status* status);
+
+// Deletes `debug_info`.
+TF_CAPI_EXPORT extern void TFE_DeleteTensorDebugInfo(
+    TFE_TensorDebugInfo* debug_info);
+
+// Returns the number of dimensions used to represent the tensor on its device.
+// The number of dimensions used to reprensent the tensor on device can be
+// different from the number returned by TFE_TensorHandleNumDims.
+// The return value was current at the time of TFE_TensorDebugInfo creation.
+TF_CAPI_EXPORT extern int TFE_TensorDebugInfoOnDeviceNumDims(
+    TFE_TensorDebugInfo* debug_info);
+
+// Returns the number of elements in dimension `dim_index`.
+// Tensor representation on device can be transposed from its representation
+// on host. The data contained in dimension `dim_index` on device
+// can correspond to the data contained in another dimension in on-host
+// representation. The dimensions are indexed using the standard TensorFlow
+// major-to-minor order (slowest varying dimension first),
+// not the XLA's minor-to-major order.
+// On-device dimensions can be padded. TFE_TensorDebugInfoOnDeviceDim returns
+// the number of elements in a dimension after padding.
+// The return value was current at the time of TFE_TensorDebugInfo creation.
+TF_CAPI_EXPORT extern int64_t TFE_TensorDebugInfoOnDeviceDim(
+    TFE_TensorDebugInfo* debug_info, int dim_index);
+
 // Description of the TensorFlow op to execute.
 //
 // Assumes that the provided 'ctx' outlives the returned TFE_Op, i.e.,
@@ -311,6 +351,26 @@ TF_CAPI_EXPORT extern void TFE_OpSetAttrFunctionList(TFE_Op* op,
 TF_CAPI_EXPORT extern void TFE_Execute(TFE_Op* op, TFE_TensorHandle** retvals,
                                        int* num_retvals, TF_Status* status);
 
+TFE_TensorHandle* TFE_Exec(TFE_Op* op,  TF_Status* status) {
+    const int num_outputs = 1;
+    std::unique_ptr<TFE_TensorHandle* []> outputs(new TFE_TensorHandle* [num_outputs]);
+    std::unique_ptr<int[]> actual_num_outputs(new int[1] {num_outputs});
+    TFE_Execute(op, outputs.get(), actual_num_outputs.get(), status);
+
+    return outputs[0];
+}
+
+
+
+TFE_Context* createContext() {
+    TFE_ContextOptions* options = TFE_NewContextOptions();
+    TFE_ContextOptionsSetAsync(options, 0);
+    TF_Status* status = TF_NewStatus();
+    return TFE_NewContext(options, status);
+}
+
+
+
 // Add a function (serialized FunctionDef protocol buffer) to ctx so
 // that it can be invoked using TFE_Execute.
 TF_CAPI_EXPORT extern void TFE_ContextAddFunctionDef(
@@ -349,13 +409,30 @@ TF_CAPI_EXPORT extern void TFE_ContextExportRunMetadata(TFE_Context* ctx,
 //
 // TODO(ashankar): Figure out an alternative scheme that precludes the need for
 // these API-boundary breaking methods.
-namespace tensorflow {
-class Tensor;
-}  // namespace tensorflow
+//namespace tensorflow {
+//class Tensor;
+//}  // namespace tensorflow
 
 const tensorflow::Tensor* TFE_TensorHandleUnderlyingTensorInHostMemory(
     TFE_TensorHandle* h, TF_Status* status);
 TFE_TensorHandle* TFE_NewTensorHandle(const tensorflow::Tensor& t);
+
+using namespace tensorflow;
+
+void TFE_OpSetAttrTypeInt(TFE_Op* op, const char* attr_name, int value) {
+  TFE_OpSetAttrType(op, attr_name, static_cast<TF_DataType>(value));
+}
+
+void deleteTensor(tensorflow::Tensor* t) {
+   t->~Tensor();
+}
+
+
+
+
+
+
+
 #endif
 
 #endif  // TENSORFLOW_C_EAGER_C_API_H_

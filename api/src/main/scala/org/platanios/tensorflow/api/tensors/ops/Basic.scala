@@ -24,8 +24,9 @@ import org.platanios.tensorflow.api.ops.NN.CNNDataFormat
 import org.platanios.tensorflow.api.tensors._
 import org.platanios.tensorflow.api.types._
 import org.platanios.tensorflow.jni.generated.tensors.{Basic => NativeTensorOpsBasic}
-
 import java.nio.charset.StandardCharsets
+
+import org.platanios.tensorflow.api.ops.EagerOp
 
 import scala.language.postfixOps
 import scala.util.DynamicVariable
@@ -263,8 +264,15 @@ private[api] trait Basic {
     * @return Result as a new tensor.
     */
   def reshape(input: Tensor, shape: Tensor): Tensor = {
-    Tensor.fromNativeHandle(
-      NativeTensorOpsBasic.reshape(executionContext.value.nativeHandle, input.nativeHandle, shape.nativeHandle))
+
+    val b = EagerOp.Builder("Reshape", "")
+    b.addAttribute("T", input.dataType)
+    b.addAttribute("Tshape", shape.dataType)
+    b.addInputs(input, shape)
+    b.build().execute()
+
+    //Tensor.fromNativeHandle(
+      //NativeTensorOpsBasic.reshape(executionContext.value.nativeHandle, input.nativeHandle, shape.nativeHandle))
   }
 
   /** $OpDocBasicTranspose
@@ -972,7 +980,6 @@ object Basic extends Basic {
       */
     def reshape[T: TensorConvertible](shape: T): Tensor = {
       val res = Basic.reshape(tensor, shape)
-      tensor.close()
       res
     }
 
@@ -1216,17 +1223,11 @@ object Basic extends Basic {
       * @return Created op.
       */
     def slice(indexers: Indexer*): Tensor = {
-      val stridedSlice = Indexer.toStridedSlice(indexers: _*)
-      val beginTensor: Tensor = stridedSlice._1
-      val endTensor: Tensor = stridedSlice._2
-      val stridesTensor: Tensor = stridedSlice._3
-      val result = Basic.stridedSlice(
-        tensor, beginTensor, endTensor, stridesTensor, stridedSlice._4, stridedSlice._5, stridedSlice._6,
-        stridedSlice._7, stridedSlice._8)
-      beginTensor.close()
-      endTensor.close()
-      stridesTensor.close()
-      result
+      val ss = Indexer.toStridedSlice(indexers: _*)
+      val beginTensor: Tensor = Tensor.fromArrayInt(ss._1)
+      val endTensor: Tensor = Tensor.fromArrayInt(ss._2)
+      val stridesTensor: Tensor = Tensor.fromArrayInt(ss._3)
+      stridedSlice(tensor, beginTensor, endTensor, stridesTensor, ss._4, ss._5, ss._6, ss._7, ss._8)
     }
 
     //endregion Tensor Slicing Ops

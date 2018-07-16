@@ -24,8 +24,8 @@ import org.platanios.tensorflow.api.ops.control_flow.{ControlFlow, WhileLoopVari
 import org.platanios.tensorflow.api.ops.rnn.cell.{RNNCell, Tuple}
 import org.platanios.tensorflow.api.tensors.Tensor
 import org.platanios.tensorflow.api.types._
-
 import com.typesafe.scalalogging.Logger
+import org.platanios.tensorflow.api.ops.Basic.BasicOps
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ArrayBuffer
@@ -145,7 +145,7 @@ class BeamSearchDecoder[S, SS](
         rnnState = processedInitialCellState,
         logProbabilities = Basic.oneHot(
           indices = Basic.zeros(INT32, batchSize.expandDims(0)), depth = beamWidth,
-          onValue = Basic.constant(0, dataType), offValue = Basic.constant(dataType.min, dataType),
+          onValue = Basic.constant(0, dataType), offValue = Basic.constant(Tensor(dataType.min), dataType),
           dataType = dataType),
         finished = finished,
         sequenceLengths = Basic.zeros(INT64, Basic.stack(Seq(batchSize, beamWidth))))
@@ -522,7 +522,7 @@ object BeamSearchDecoder {
     // Finished examples are replaced with a vector that has all its probability mass on `endToken`
     val dType = logProbabilities.dataType
     import dType.supportedType
-    val dTypeMin = Tensor(dType.min).slice(0)
+    val dTypeMin = Tensor.apply(dType.min).slice(0)
     val finishedRow = Basic.oneHot(endToken, vocabSize, Basic.zeros(dType, Shape()), Basic.constant(dTypeMin))
     val finishedLogProbabilities = Basic.tile(
       finishedRow.reshape(Shape(1, 1, -1)), Basic.concatenate(Seq(Basic.shape(finished), Tensor(1)), 0))

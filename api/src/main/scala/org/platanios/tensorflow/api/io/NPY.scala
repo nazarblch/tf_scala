@@ -107,11 +107,10 @@ object NPY {
     val header = Header(description, fortranOrder, tensor.shape).toString
 
     val resolvedHandle = tensor.resolve()
-    val buffer = NativeTensor.buffer(resolvedHandle).order(ByteOrder.nativeOrder)
+    val buffer = resolvedHandle.getBuffer
     val dataBytes = buffer.array()
     tensor.NativeHandleLock synchronized {
-      if (resolvedHandle != 0)
-        NativeTensor.delete(resolvedHandle)
+      if (!resolvedHandle.isNull) resolvedHandle.close()
     }
 
     val remaining = (header.length + 11) % 16

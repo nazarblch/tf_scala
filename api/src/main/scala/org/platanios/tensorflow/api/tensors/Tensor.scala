@@ -26,7 +26,7 @@ import org.platanios.tensorflow.api.tensors.ops.{Math, Random}
 import org.platanios.tensorflow.api.types._
 import org.platanios.tensorflow.api.utilities.{Closeable, Disposer, NativeHandleWrapper}
 import org.platanios.tensorflow.api.utilities.Proto.{Serializable => ProtoSerializable}
-import org.platanios.tensorflow.jni.{Tensor => NativeTensor}
+import org.platanios.tensorflow.jni.{ExecWithStatusCheck, Tensor => NativeTensor}
 import org.platanios.tensorflow.jni.generated.tensors.{Sparse => NativeTensorOpsSparse}
 import com.google.protobuf.ByteString
 import com.typesafe.scalalogging.Logger
@@ -35,10 +35,20 @@ import org.tensorflow.framework.TensorProto
 import java.nio._
 import java.nio.charset.Charset
 import java.nio.file.Path
+import java.util
+
+import native_types.c_api.c_api.{TF_Status, TF_Tensor}
+import native_types.c_api.eager.c_api._
+import native_types.c_api.eager.c_api.TFE_TensorHandle
+import native_types.core.eager.EagerTensor
+import native_types.core.framework.{TensorFactory, TensorShape, Tensor => JTensor}
+import org.bytedeco.javacpp.Pointer
 
 import scala.collection.{TraversableLike, breakOut, mutable}
 import scala.language.{higherKinds, postfixOps}
+import scala.reflect.ClassTag
 import scala.util.DynamicVariable
+import org.bytedeco.javacpp.indexer.{Indexer => JCPPIndexer}
 
 /** Represents tensor-like objects.
   *
@@ -140,24 +150,45 @@ private[tensors] object TensorOps {
   *
   * @author Emmanouil Antonios Platanios
   */
-class Tensor private[Tensor](
-    private[api] val nativeHandleWrapper: NativeHandleWrapper,
+class Tensor private[Tensor](tfe_handle: TFE_TensorHandle,
     override protected val closeFn: () => Unit
-) extends TensorLike
+) extends Pointer
+        with TensorLike
         with Closeable
         with ProtoSerializable {
 
-  /** Lock for the native handle. */
-  private[api] def NativeHandleLock = nativeHandleWrapper.Lock
+  protected class DeleteDeallocator private[tensors](val s: TFE_TensorHandle) extends TFE_TensorHandle(s) with Pointer.Deallocator {
+    override def deallocate(): Unit = {
+      if(!this.isNull) {
+        System.out.println("delete EagerTensor")
+        TFE_DeleteTensorHandle(this)
+        setNull()
+      }
+    }
+  }
 
-  /** Native handle of this tensor. */
-  private[api] def nativeHandle: Long = nativeHandleWrapper.handle
+  deallocator(new DeleteDeallocator(tfe_handle))
+
+  def dims: Array[Long] = Dims(tfe_handle)
+
+
+//  def toNativeTensor: JTensor = {
+//    val res = ExecWithStatusCheck(TFE_TensorHandleUnderlyingTensorInHostMemory(tfe_handle, _))
+//    res
+//  }
+
+
+  private[api] object Lock
+  private[api] def NativeHandleLock = Lock
+
+  //TODO: delete
+  val nativeHandle: Long = tfe_handle.address()
 
   /** Data type of this tensor. */
-  override val dataType: DataType = DataType.fromCValue(NativeTensor.eagerDataType(nativeHandle))
+  val dataType: DataType = DataType.fromCValue(TFE_TensorHandleDataType(tfe_handle))
 
   /** Shape of this tensor. */
-  override val shape: Shape = Shape.fromSeq(NativeTensor.eagerShape(nativeHandle).map(_.toInt))
+  val shape: Shape = Shape.fromSeq(dims.map(_.toInt))
 
   /** Rank of this tensor (i.e., number of dimensions). */
   def rank: Int = shape.rank
@@ -165,8 +196,9 @@ class Tensor private[Tensor](
   /** Number of elements contained in this tensor. */
   def size: Long = shape.numElements
 
+
   /** Device in which the tensor is stored. */
-  override val device: String = NativeTensor.eagerDevice(nativeHandle)
+  override val device: String = ExecWithStatusCheck.apply(TFE_TensorHandleDeviceName(tfe_handle, _).getString())
 
   /** Returns a copy of this tensor on the CPU. */
   def cpu(): Tensor = copyToDevice("CPU:0")
@@ -183,28 +215,34 @@ class Tensor private[Tensor](
     */
   def copyToDevice(device: String): Tensor = {
     val parsedDevice = DeviceSpecification.fromString(device).toString.stripPrefix("/device:")
-    val handle = NativeTensor.eagerCopyToDevice(nativeHandle, executionContext.value.nativeHandle, parsedDevice)
-    Tensor.fromNativeHandle(handle)
+    Tensor.fromNativeHandle(ExecWithStatusCheck(TFE_TensorHandleCopyToDevice(tfe_handle, parsedDevice, _)))
   }
 
-  private[api] def resolve(): Long = {
-    NativeTensor.eagerResolve(nativeHandle)
+  //TODO: Delete
+  private[api] def resolve(): ClassicTensor = {
+    // NativeTensor.eagerResolve(tfe_handle.address)
+    val tft: TF_Tensor = ExecWithStatusCheck( TFE_TensorHandleResolve(tfe_handle, _))
+    ClassicTensor.fromNativeTensor(tft)
   }
+
+
+  def apply(indexers: Indexer*): Tensor = this.slice(indexers: _*)
+
+  def slice(indexers: Indexer*): Tensor = BasicOps(this).slice(indexers: _*)
+
 
   private[api] def getElementAtFlattenedIndex(index: Int): dataType.ScalaType = {
-    val resolvedHandle = resolve()
-    val buffer = NativeTensor.buffer(resolvedHandle).order(ByteOrder.nativeOrder)
-    val value = dataType match {
-      case STRING =>
-        val offset = INT64.byteSize * size.toInt + INT64.getElementFromBuffer(buffer, index * INT64.byteSize).toInt
-        dataType.getElementFromBuffer(buffer, offset)
-      case _ => dataType.getElementFromBuffer(buffer, index * dataType.byteSize)
-    }
-    NativeHandleLock synchronized {
-      if (resolvedHandle != 0)
-        NativeTensor.delete(resolvedHandle)
-    }
-    value
+    val tff = resolve()
+    val res = tff.getElementAtFlattenedIndex(index).asInstanceOf[dataType.ScalaType]
+    tff.close()
+    res
+  }
+
+  private[api] def toVector: Vector[dataType.ScalaType] = {
+    val tff = resolve()
+    val res = tff.toVector.asInstanceOf[Vector[dataType.ScalaType]]
+    tff.close()
+    res
   }
 
   @throws[InvalidShapeException]
@@ -215,42 +253,22 @@ class Tensor private[Tensor](
     getElementAtFlattenedIndex(0)
   }
 
-  def getBuffer: Array[Byte] = NativeTensor.buffer(resolve()).order(ByteOrder.nativeOrder).array()
-
   def entriesIterator: Iterator[dataType.ScalaType] = new Iterator[dataType.ScalaType] {
-    private var resolvedHandle: Long = resolve()
-    private var i             : Int  = 0
-
-    private val buffer      : ByteBuffer = NativeTensor.buffer(resolvedHandle).order(ByteOrder.nativeOrder)
-    private val stringOffset: Int        = INT64.byteSize * Tensor.this.size.toInt
+    private val t: ClassicTensor = resolve()
+    private val it = t.entriesIterator
 
     override def hasNext: Boolean = {
-      val hasNext = resolvedHandle != 0 && i < Tensor.this.size.toInt
-      if (!hasNext && resolvedHandle != 0) {
-        NativeHandleLock synchronized {
-          NativeTensor.delete(resolvedHandle)
-          resolvedHandle = 0
-        }
+      val hasNext = it.hasNext
+      if (!hasNext) {
+        t.close()
       }
       hasNext
     }
 
     override def next(): dataType.ScalaType = {
-      val nextElement = dataType match {
-        case STRING =>
-          dataType.getElementFromBuffer(
-            buffer, stringOffset + INT64.getElementFromBuffer(buffer, i * INT64.byteSize).toInt)
-        case _ =>
-          dataType.getElementFromBuffer(buffer, i * dataType.byteSize)
-      }
-      i += 1
-      nextElement
+      it.next().asInstanceOf[dataType.ScalaType]
     }
   }
-
-  def apply(indexers: Indexer*): Tensor = this.slice(indexers: _*)
-
-  def slice(indexers: Indexer*): Tensor = BasicOps(this).slice(indexers: _*)
 
   /** Returns a summary of the contents of this tensor.
     *
@@ -341,6 +359,10 @@ class Tensor private[Tensor](
     result
   }
 
+  def opAddInput(op: TFE_Op): Unit = {
+    ExecWithStatusCheck(TFE_OpAddInput(op, tfe_handle, _))
+  }
+
   def toOutput: Output = Basic.constant(this.cpu())
 
   /** Closes this [[Tensor]] and releases any resources associated with it. Note that an [[Tensor]] is not
@@ -353,35 +375,47 @@ object Tensor {
 
   val tensorMonitor: mutable.Map[Long, String] = mutable.Map()
 
-  private[api] def fromNativeHandle(nativeHandle: Long): Tensor = {
+  private[api] def apply(jt: JTensor): Tensor = {
+    val res = fromNativeHandle(TFE_NewTensorHandle(jt))
+    res
+  }
 
-    val nativeHandleWrapper = NativeHandleWrapper(nativeHandle)
+  def fromEagerTensor(t: EagerTensor): Tensor = {
+    fromNativeHandle(t.getHandle)
+  }
+
+  private[api] def fromNativeHandle(nativeHandle: TFE_TensorHandle): Tensor = {
 
     val closeFn = () => {
-      nativeHandleWrapper.Lock.synchronized {
-        if (nativeHandleWrapper.handle != 0) {
-          NativeTensor.eagerDelete(nativeHandleWrapper.handle)
-          tensorMonitor.remove(nativeHandleWrapper.handle)
-          nativeHandleWrapper.handle = 0
-        }
+      // nativeHandleWrapper.Lock.synchronized {
+      if (!nativeHandle.isNull) {
+        // println("delete Eager Tensor from closeFn")
+        TFE_DeleteTensorHandle(nativeHandle)
+        tensorMonitor.remove(nativeHandle.address())
+        nativeHandle.setNull()
       }
+      //}
     }
-    val tensor = new Tensor(nativeHandleWrapper, closeFn)
+
+    val tensor = new Tensor(nativeHandle, closeFn)
     // Keep track of references in the Scala side and notify the native library when the tensor is not referenced
     // anymore anywhere in the Scala side. This will let the native library free the allocated resources and prevent a
     // potential memory leak.
-    tensorMonitor.put(nativeHandleWrapper.handle, "")
+    tensorMonitor.put(nativeHandle.address(), "")
     Disposer.add(tensor, closeFn)
     tensor
   }
 
-  def fromExternalHandle(nativeHandle: Long): Tensor = {
-   fromHostNativeHandle(nativeHandle)
+  // TODO: delete
+  private[api] def fromNativeHandle(nativeHandle: Long): Tensor = {
+    fromNativeHandle(new TFE_TensorHandle(nativeHandle))
   }
 
-  private[api] def fromHostNativeHandle(nativeHandle: Long): Tensor = {
-    Tensor.fromNativeHandle(NativeTensor.eagerAllocate(nativeHandle))
+  // TODO: delete
+  private[api] def fromHostNativeHandle(long: Long): Tensor = {
+    fromNativeHandle(new TFE_TensorHandle(NativeTensor.eagerAllocate(long)))
   }
+
 
   def apply[T](head: T, tail: T*)(implicit ev: TensorConvertible[T]): Tensor = {
     val tensors = head +: tail map ev.toTensor
@@ -503,40 +537,21 @@ object Tensor {
     // if (inferredDataType.priority < ev.dataType.priority)
     //   logger.warn(s"Downcasting value '$value' while creating tensor with '$dataType' data type.")
     shape.assertFullyDefined()
-    inferredDataType match {
+
+    val factory = new TensorFactory[T](dataType.cValue, shape.asArray.map(_.toLong))
+
+    val jt: JTensor = inferredDataType match {
       case STRING =>
-        val numStringBytes = value.toString.getBytes(Charset.forName("UTF-8")).length
-        val numEncodedBytes = NativeTensor.getEncodedStringSize(numStringBytes)
-        val numBytes = shape.numElements * (INT64.byteSize + numEncodedBytes)
-        val hostHandle = NativeTensor.allocate(STRING.cValue, shape.asArray.map(_.toLong), numBytes)
-        val buffer = NativeTensor.buffer(hostHandle).order(ByteOrder.nativeOrder)
-        val baseOffset = INT64.byteSize * shape.numElements.toInt
-        var index = 0
-        var i = 0
-        while (i < shape.numElements) {
-          val numEncodedBytes = STRING.putElementInBuffer(buffer, baseOffset + index, STRING.cast(value))
-          INT64.putElementInBuffer(buffer, i * INT64.byteSize, index.toLong)
-          index += numEncodedBytes
-          i += 1
-        }
-        val tensor = Tensor.fromHostNativeHandle(hostHandle)
-        NativeTensor.delete(hostHandle)
-        tensor
+        //TODO: long to int cast
+        val data: Array[String] = Array.fill(shape.numElements.toInt)(value.asInstanceOf[String])
+        factory.createStringTensor(data)
       case _ =>
-        val numBytes = shape.numElements * inferredDataType.byteSize
-        val hostHandle = NativeTensor.allocate(inferredDataType.cValue, shape.asArray.map(_.toLong), numBytes)
-        val buffer = NativeTensor.buffer(hostHandle).order(ByteOrder.nativeOrder)
-        var index = 0
-        var i = 0
-        while (i < shape.numElements) {
-          inferredDataType.putElementInBuffer(buffer, index, inferredDataType.cast(value))
-          index += inferredDataType.byteSize
-          i += 1
-        }
-        val tensor = Tensor.fromHostNativeHandle(hostHandle)
-        NativeTensor.delete(hostHandle)
-        tensor
+        //TODO: long to int cast
+        factory.fill(dataType.cast(value).asInstanceOf[T])
     }
+
+    apply(jt)
+
   }
 
   /** Allocates a new tensor without worrying about the values stored in it.
@@ -548,24 +563,9 @@ object Tensor {
     *                                  tensor are not known until all its element values are known.
     */
   @throws[IllegalArgumentException]
-  private[api] def allocate(dataType: DataType, shape: Shape): Tensor = dataType match {
-    case STRING =>
-      if (shape.numElements == 0) {
-        val hostHandle = NativeTensor.allocate(dataType.cValue, Array[Long](0), 0)
-        val tensor = Tensor.fromHostNativeHandle(hostHandle)
-        NativeTensor.delete(hostHandle)
-        tensor
-      } else {
-        throw new IllegalArgumentException(
-          "Cannot pre-allocate string tensors because their size is not known.")
-      }
-    case _ =>
-      shape.assertFullyDefined()
-      val numBytes = shape.numElements * dataType.byteSize
-      val hostHandle = NativeTensor.allocate(dataType.cValue, shape.asArray.map(_.toLong), numBytes)
-      val tensor = Tensor.fromHostNativeHandle(hostHandle)
-      NativeTensor.delete(hostHandle)
-      tensor
+  private[api] def allocate(dataType: DataType, shape: Shape): Tensor = {
+      val jt = new JTensor(dataType.cValue, shape.asArray.map(_.toLong))
+      apply(jt)
   }
 
   @throws[IllegalArgumentException]
@@ -581,44 +581,30 @@ object Tensor {
         direct
       }
     }
-    val hostHandle = NativeTensor.fromBuffer(dataType.cValue, shape.asArray.map(_.toLong), numBytes, directBuffer)
-    val tensor = Tensor.fromHostNativeHandle(hostHandle)
-    NativeTensor.delete(hostHandle)
-    tensor
+    val jt = new TensorFactory(dataType.cValue, shape.asArray.map(_.toLong)).createFromBuffer(numBytes, buffer)
+
+    apply(jt)
+
   }
 
 
-  @throws[IllegalArgumentException]
   def fromArrayInt(data: Array[Int]): Tensor = this synchronized {
-    val hostHandle = NativeTensor.fromArrayInt(INT32.cValue, data)
-    val tensor = Tensor.fromHostNativeHandle(hostHandle)
-    NativeTensor.delete(hostHandle)
-    tensor
+    val jt = new TensorFactory(INT32.cValue, Array[Long](data.length)).createFromArray(data)
+    apply(jt)
   }
 
   @throws[IllegalArgumentException]
   def fromArrayFloat(data: Array[Float]): Tensor = this synchronized {
-    val hostHandle = NativeTensor.fromArrayFloat(FLOAT32.cValue, data)
-    val tensor = Tensor.fromHostNativeHandle(hostHandle)
-    NativeTensor.delete(hostHandle)
-    tensor
+    val jt = new TensorFactory(FLOAT32.cValue, Array[Long](data.length)).createFromArray(data)
+    apply(jt)
   }
 
   @throws[IllegalArgumentException]
   def fromArrayBool(data: Array[Boolean]): Tensor = this synchronized {
-    val hostHandle = NativeTensor.fromArrayBool(BOOLEAN.cValue, data)
-    val tensor = Tensor.fromHostNativeHandle(hostHandle)
-    NativeTensor.delete(hostHandle)
-    tensor
+    val jt = new TensorFactory(BOOLEAN.cValue, Array[Long](data.length)).createFromArray(data)
+    apply(jt)
   }
 
-//  @throws[IllegalArgumentException]
-//  def fromArray(data: Array[Float]): Tensor = this synchronized {
-//    val hostHandle = NativeTensor.fromArray()
-//    val tensor = Tensor.fromHostNativeHandle(hostHandle)
-//    NativeTensor.delete(hostHandle)
-//    tensor
-//  }
 
   /** Reads the tensor stored in the provided Numpy (i.e., `.npy`) file. */
   @throws[IllegalArgumentException]
@@ -637,11 +623,10 @@ object Tensor {
       throw InvalidArgumentException("Cannot serialize tensors whose content is larger than 2GB.")
     if (value.dataType != STRING && value.size == inferredShape.numElements) {
       val resolvedHandle = castedValue.resolve()
-      val buffer = NativeTensor.buffer(resolvedHandle).order(ByteOrder.nativeOrder)
+      val buffer = resolvedHandle.getBuffer
       tensorProtoBuilder.setTensorContent(ByteString.copyFrom(buffer))
       castedValue.NativeHandleLock synchronized {
-        if (resolvedHandle != 0)
-          NativeTensor.delete(resolvedHandle)
+        if (!resolvedHandle.isNull) resolvedHandle.close()
       }
     } else {
       castedValue.entriesIterator.foreach(v => {
@@ -809,9 +794,10 @@ final case class SparseTensor(indices: Tensor, values: Tensor, denseShape: Tenso
     */
   def toTensor(
       defaultValue: Tensor = 0, validateIndices: Boolean = true): Tensor = {
-    Tensor.fromNativeHandle(NativeTensorOpsSparse.sparseToDense(
-      executionContext.value.nativeHandle, indices.nativeHandle, denseShape.nativeHandle, values.nativeHandle,
-      defaultValue.nativeHandle, validateIndices))
+    ???
+//    Tensor.fromNativeHandle(NativeTensorOpsSparse.sparseToDense(
+//      executionContext.value.nativeHandle, indices., denseShape.nativeHandle, values.nativeHandle,
+//      defaultValue.nativeHandle, validateIndices))
   }
 
   /** Returns an [[TensorIndexedSlices]] that has the same value as this [[TensorLike]].

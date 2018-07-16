@@ -23,6 +23,10 @@ import java.nio.file.{Files, Path, StandardCopyOption}
 
 import scala.collection.JavaConverters._
 
+object STF {
+  def load() = TensorFlow.load()
+}
+
 /**
   * @author Emmanouil Antonios Platanios
   */
@@ -82,6 +86,10 @@ object TensorFlow {
       Option(classLoader.getResourceAsStream(makeResourceName(LIB_NAME)))
           .map(extractResource(LIB_NAME, _, tempDirectory))
 
+      // System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow.so")
+      System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so")
+      System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so")
+
       // Load the TensorFlow JNI bindings from the appropriate resource.
       val jniResourceStream = Option(classLoader.getResourceAsStream(makeResourceName(JNI_LIB_NAME)))
       val jniPath = jniResourceStream.map(extractResource(JNI_LIB_NAME, _, tempDirectory))
@@ -94,7 +102,7 @@ object TensorFlow {
         try {
           System.load(path.toAbsolutePath.toString)
         } catch {
-          case exception: IOException => throw new UnsatisfiedLinkError(
+          case exception: Exception => throw new UnsatisfiedLinkError(
             "Unable to load the TensorFlow JNI bindings from the extracted file. This could be due to the TensorFlow " +
                 s"native library not being available. Error: ${exception.getMessage}.")
         }

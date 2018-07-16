@@ -21,7 +21,10 @@ import java.nio._
 import java.nio.charset.Charset
 import java.nio.file.Path
 
+import native_types.c_api.c_api._
+import native_types.c_api.eager.c_api.{TFE_DeleteTensorHandle, TFE_TensorHandle}
 import native_types.core.framework.{TensorShape, Tensor => JTensor}
+import org.bytedeco.javacpp.Pointer
 
 import scala.collection.{TraversableLike, breakOut, mutable}
 import scala.language.{higherKinds, postfixOps}
@@ -53,25 +56,31 @@ import scala.language.{higherKinds, postfixOps}
   *
   * @author Emmanouil Antonios Platanios
   */
-class TMPTensor (
-                                  nativeTensor: JTensor,
-                                    override protected val closeFn: () => Unit
-                            )
-  extends
-    // TensorLike
-   Closeable
-  // with ProtoSerializable
-   {
+class ClassicTensor(nativeTensor: TF_Tensor,
+                    protected val closeFn: () => Unit)
+  extends Pointer {
+
+  protected class DeleteDeallocator private[tensors](val s: TF_Tensor) extends TF_Tensor(s) with Pointer.Deallocator {
+    override def deallocate(): Unit = {
+      if(!this.isNull) {
+        System.out.println("delete TF_Tensor")
+        TF_DeleteTensor(this)
+        setNull()
+      }
+    }
+  }
 
   /** Lock for the native handle. */
   private[api] object Lock
   private[api] def NativeHandleLock = Lock
 
+  private [api] def getHandleAddress: Long = nativeTensor.address
+
   /** Data type of this tensor. */
-  val dataType: DataType = DataType.fromCValue(nativeTensor.dtype())
+  val dataType: DataType = DataType.fromCValue(TF_TensorType(nativeTensor))
 
   /** Shape of this tensor. */
-  val shape: Shape = Shape.fromSeq(Seq.range(0, nativeTensor.dims()).map(i => nativeTensor.dim_size(i).toInt))
+  val shape: Shape = Shape.fromSeq(Seq.range(0, TF_NumDims(nativeTensor)).map(i => TF_Dim(nativeTensor, i).toInt))
 
   /** Rank of this tensor (i.e., number of dimensions). */
   def rank: Int = shape.rank
@@ -80,16 +89,14 @@ class TMPTensor (
   def size: Long = shape.numElements
 
   private[api] def getElementAtFlattenedIndex(index: Int): dataType.ScalaType = {
-    val data = nativeTensor.tensor_data()
-    val buffer = data.asBuffer()
+    val bb = getBuffer
     val value = dataType match {
       case STRING =>
-        val offset = INT64.byteSize * size.toInt + INT64.getElementFromBuffer(buffer, index * INT64.byteSize).toInt
-        dataType.getElementFromBuffer(buffer, offset)
-      case _ => dataType.getElementFromBuffer(buffer, index * dataType.byteSize)
+        val offset = INT64.byteSize * size.toInt + INT64.getElementFromBuffer(bb, index * INT64.byteSize).toInt
+        dataType.getElementFromBuffer(bb, offset)
+      case _ => dataType.getElementFromBuffer(bb, index * dataType.byteSize)
     }
-    data.deallocate()
-    buffer.clear()
+    bb.clear()
     value
   }
 
@@ -101,19 +108,17 @@ class TMPTensor (
     getElementAtFlattenedIndex(0)
   }
 
-  // def getBuffer: Array[Byte] = NativeTensor.buffer(resolve()).order(ByteOrder.nativeOrder).array()
+  def getBuffer: ByteBuffer = NativeTensor.buffer(nativeTensor.address).order(ByteOrder.nativeOrder)
 
   def entriesIterator: Iterator[dataType.ScalaType] = new Iterator[dataType.ScalaType] {
     private var i             : Int  = 0
-    private val data = nativeTensor.tensor_data()
-    private val buffer      : ByteBuffer = data.asBuffer()
-    private val stringOffset: Int        = INT64.byteSize * TMPTensor.this.size.toInt
+    val buffer = getBuffer
+    private val stringOffset: Int        = INT64.byteSize * ClassicTensor.this.size.toInt
 
     override def hasNext: Boolean = {
-      val hasNext = i < TMPTensor.this.size.toInt
+      val hasNext = i < ClassicTensor.this.size.toInt
       if (!hasNext && buffer.capacity() > 0) {
         buffer.clear()
-        data.deallocate()
       }
       hasNext
     }
@@ -129,6 +134,24 @@ class TMPTensor (
       i += 1
       nextElement
     }
+  }
+
+
+  def toVector = {
+    val buffer = getBuffer
+    val stringOffset: Int        = INT64.byteSize * ClassicTensor.this.size.toInt
+
+    Vector.range(0, size.toInt).map(i => {
+      val nextElement = dataType match {
+        case STRING =>
+          dataType.getElementFromBuffer(
+            buffer, stringOffset + INT64.getElementFromBuffer(buffer, i * INT64.byteSize).toInt)
+        case _ =>
+          dataType.getElementFromBuffer(buffer, i * dataType.byteSize)
+      }
+      nextElement
+    })
+
   }
 
 
@@ -180,8 +203,32 @@ class TMPTensor (
 
   /** Closes this [[Tensor]] and releases any resources associated with it. Note that an [[Tensor]] is not
     * usable after it has been closed. */
-  override def close(): Unit = closeFn()
+  override def close(): Unit = {
+    closeFn()
+    setNull()
+  }
 
   /** Device on which this tensor is stored. */
   // override val device: String = ???
+}
+
+
+object ClassicTensor {
+
+  private[api] def fromNativeTensor(tf: TF_Tensor): ClassicTensor = {
+
+    val closeFn = () => {
+      // nativeHandleWrapper.Lock.synchronized {
+      if (!tf.isNull) {
+        TF_DeleteTensor(tf)
+        tf.setNull()
+      }
+      //}
+    }
+
+    val tensor = new ClassicTensor(tf, closeFn)
+    Disposer.add(tensor, closeFn)
+    tensor
+  }
+
 }

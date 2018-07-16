@@ -1442,11 +1442,11 @@ object Op {
           case value: Array[DataType] =>
             NativeOp.setAttrTypeList(nativeHandle, attribute._1, value.map(_.cValue))
           case value: Tensor =>
-            val handle = value.resolve()
+            val handle = value.resolve().getHandleAddress
             NativeOp.setAttrTensor(nativeHandle, attribute._1, handle)
             NativeTensor.delete(handle)
           case value: Array[Tensor] =>
-            val handles = value.map(_.resolve())
+            val handles = value.map(_.resolve().getHandleAddress)
             NativeOp.setAttrTensorList(nativeHandle, attribute._1, handles)
             handles.foreach(NativeTensor.delete)
           case value: AttrValue =>

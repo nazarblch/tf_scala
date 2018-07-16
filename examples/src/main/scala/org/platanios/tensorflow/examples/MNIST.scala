@@ -68,8 +68,8 @@ object MNIST {
     val trainingInputLayer = tf.learn.Cast("TrainInput/Cast", INT64)
     val loss = tf.learn.SparseSoftmaxCrossEntropy("Loss/CrossEntropy") >>
         tf.learn.Mean("Loss/Mean") >> tf.learn.ScalarSummary("Loss/Summary", "Loss")
-    // val optimizer = tf.train.AdaGrad(0.1)
-    val optimizer = tf.train.YellowFin()
+    val optimizer = tf.train.AdaGrad(0.01)
+    //val optimizer = tf.train.YellowFin()
     val model = tf.learn.Model.supervised(input, layer, trainInput, trainingInputLayer, loss, optimizer, clipGradients = ClipGradientsByGlobalNorm(5.0f))
 
     logger.info("Training the linear regression model.")
@@ -89,7 +89,7 @@ object MNIST {
         tf.learn.SummarySaver(summariesDir, tf.learn.StepHookTrigger(100)),
         tf.learn.CheckpointSaver(summariesDir, tf.learn.StepHookTrigger(1000))),
       tensorBoardConfig = tf.learn.TensorBoardConfig(summariesDir, reloadInterval = 1))
-    estimator.train(() => trainData, tf.learn.StopCriteria(maxSteps = Some(10000)))
+    estimator.train(() => trainData, tf.learn.StopCriteria(maxSteps = Some(100000)))
 
     def accuracy(images: Tensor, labels: Tensor): Float = {
       val predictions = estimator.infer(() => images)

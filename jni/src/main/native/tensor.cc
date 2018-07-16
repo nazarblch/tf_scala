@@ -20,9 +20,20 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <iostream>
+#include <typeinfo>
 
 #include "tensorflow/c/c_api.h"
 #include "tensorflow/c/eager/c_api.h"
+
+using namespace std;
+
+JNIEXPORT jstring JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_typeidName(
+    JNIEnv* env, jobject object, jlong handle) {
+
+  return env->NewStringUTF(typeid(handle).name());
+
+}
 
 JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_allocate(
     JNIEnv* env, jobject object, jint data_type, jlongArray shape, jlong num_bytes) {
@@ -53,6 +64,81 @@ JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromBuffe
   size_t c_num_bytes = static_cast<size_t>(num_bytes);
   TF_Tensor* tensor = TF_AllocateTensor(dtype, dims.get(), num_dims, c_num_bytes);
   memcpy(TF_TensorData(tensor), env->GetDirectBufferAddress(buffer), c_num_bytes);
+  return reinterpret_cast<jlong>(tensor);
+}
+
+
+JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromArrayInt (
+    JNIEnv* env, jobject object, jint data_type, jintArray data) {
+  TF_DataType dtype = static_cast<TF_DataType>(data_type);
+  const int num_dims = 1;
+  std::unique_ptr<int64_t[]> dims(new int64_t[num_dims]);
+  int64_t len = static_cast<int64_t>(env->GetArrayLength(data));
+  jint *body = env->GetIntArrayElements(data, 0);
+
+  dims[0] = len;
+  size_t c_num_bytes = static_cast<size_t>(len * 4);
+
+  int32_t *datattt = (int32_t*)malloc(len * sizeof(int32_t));
+
+  int i;
+  for (i=0; i<len; i++) {
+         datattt[i] = body[i];
+  }
+
+  TF_Tensor* tensor = TF_AllocateTensor(dtype, dims.get(), num_dims, c_num_bytes);
+  memcpy(TF_TensorData(tensor), datattt, c_num_bytes);
+  free(datattt);
+  return reinterpret_cast<jlong>(tensor);
+}
+
+
+JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromArrayFloat (
+    JNIEnv* env, jobject object, jint data_type, jfloatArray data) {
+  TF_DataType dtype = static_cast<TF_DataType>(data_type);
+  const int num_dims = 1;
+  std::unique_ptr<int64_t[]> dims(new int64_t[num_dims]);
+  int64_t len = static_cast<int64_t>(env->GetArrayLength(data));
+  jfloat *body = env->GetFloatArrayElements(data, 0);
+
+  dims[0] = len;
+  size_t c_num_bytes = static_cast<size_t>(len * sizeof(float));
+
+  float *datattt = (float*)malloc(len * sizeof(float));
+
+  int i;
+  for (i=0; i<len; i++) {
+         datattt[i] = body[i];
+  }
+
+  TF_Tensor* tensor = TF_AllocateTensor(dtype, dims.get(), num_dims, c_num_bytes);
+  memcpy(TF_TensorData(tensor), datattt, c_num_bytes);
+  free(datattt);
+  return reinterpret_cast<jlong>(tensor);
+}
+
+
+JNIEXPORT jlong JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_fromArrayBool (
+    JNIEnv* env, jobject object, jint data_type, jbooleanArray data) {
+  TF_DataType dtype = static_cast<TF_DataType>(data_type);
+  const int num_dims = 1;
+  std::unique_ptr<int64_t[]> dims(new int64_t[num_dims]);
+  int64_t len = static_cast<int64_t>(env->GetArrayLength(data));
+  jboolean *body = env->GetBooleanArrayElements(data, 0);
+
+  dims[0] = len;
+  size_t c_num_bytes = static_cast<size_t>(len * sizeof(bool));
+
+  bool *datattt = (bool*)malloc(len * sizeof(bool));
+
+  int i;
+  for (i=0; i<len; i++) {
+         datattt[i] = body[i];
+  }
+
+  TF_Tensor* tensor = TF_AllocateTensor(dtype, dims.get(), num_dims, c_num_bytes);
+  memcpy(TF_TensorData(tensor), datattt, c_num_bytes);
+  free(datattt);
   return reinterpret_cast<jlong>(tensor);
 }
 
@@ -130,7 +216,15 @@ JNIEXPORT jobject JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_buffer(
 JNIEXPORT void JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_delete(
     JNIEnv* env, jobject object, jlong handle) {
   REQUIRE_HANDLE(tensor, TF_Tensor, handle, void());
-  TF_DeleteTensor(tensor);
+  try
+    {
+      TF_DeleteTensor(tensor);
+    }
+    catch (int e)
+    {
+      throw_exception(env, tf_resource_exhausted_exception, "Unable to delete native Tensor.");
+    }
+
 }
 
 JNIEXPORT jint JNICALL Java_org_platanios_tensorflow_jni_Tensor_00024_getEncodedStringSize(

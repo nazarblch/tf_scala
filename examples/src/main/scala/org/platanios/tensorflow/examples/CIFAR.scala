@@ -18,11 +18,11 @@ package org.platanios.tensorflow.examples
 import org.platanios.tensorflow.api._
 import org.platanios.tensorflow.api.ops.NN.SameConvPadding
 import org.platanios.tensorflow.data.image.CIFARLoader
-
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
-
 import java.nio.file.Paths
+
+import org.platanios.tensorflow.api.core.client.SessionConfig
 
 /**
   * @author Emmanouil Antonios Platanios
@@ -38,8 +38,9 @@ object CIFAR {
       trainImages.zip(trainLabels)
           .repeat()
           .shuffle(10000)
-          .batch(64)
+          .batch(10)
           .prefetch(10)
+
 
     logger.info("Building the logistic regression model.")
     val input = tf.learn.Input(UINT8, Shape(-1, dataSet.trainImages.shape(1), dataSet.trainImages.shape(2), dataSet.trainImages.shape(3)))
@@ -66,12 +67,13 @@ object CIFAR {
     val summariesDir = Paths.get("temp/cnn-cifar")
     val estimator = tf.learn.InMemoryEstimator(
       model,
-      tf.learn.Configuration(Some(summariesDir)),
+      tf.learn.Configuration(Some(summariesDir), Some(SessionConfig(gpuAllowMemoryGrowth = Some(false), deviceCount = Option(Map("GPU" -> 0))))),
       tf.learn.StopCriteria(maxSteps = Some(100000)),
       Set(
         tf.learn.StepRateLogger(log = false, summaryDir = summariesDir, trigger = tf.learn.StepHookTrigger(100)),
         // tf.learn.SummarySaverHook(summariesDir, tf.learn.StepHookTrigger(100)),
-      tf.learn.CheckpointSaver(summariesDir, tf.learn.StepHookTrigger(1000))),
+      tf.learn.CheckpointSaver(summariesDir, tf.learn.StepHookTrigger(1000))
+      ),
       tensorBoardConfig = tf.learn.TensorBoardConfig(summariesDir, reloadInterval = 1))
     estimator.train(() => trainData, tf.learn.StopCriteria(maxSteps = Some(1000)))
 
