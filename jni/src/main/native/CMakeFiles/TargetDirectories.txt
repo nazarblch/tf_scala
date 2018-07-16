@@ -1,7 +1,0 @@
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/install.dir
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/list_install_components.dir
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/rebuild_cache.dir
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/tensorflow_jni.dir
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/install/local.dir
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/tensorflow_ops.dir
-/home/nazar/tensorflow_scala/jni/src/main/native/CMakeFiles/edit_cache.dir
