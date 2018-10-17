@@ -19,6 +19,7 @@ import org.platanios.tensorflow.api.core.Shape
 import org.platanios.tensorflow.api.learn.{Mode, layers}
 import org.platanios.tensorflow.api.ops
 import org.platanios.tensorflow.api.ops.Output
+import org.platanios.tensorflow.api.ops.rnn.cell.Tuple
 
 import scala.collection.TraversableLike
 import scala.collection.generic.CanBuildFrom
@@ -43,6 +44,7 @@ object Basic {
     val Flatten  : layers.Flatten.type   = layers.Flatten
     val Transpose: layers.Transpose.type = layers.Transpose
     val OneHot   : layers.OneHot.type    = layers.OneHot
+    val Reshape   : layers.Reshape.type    = layers.Reshape
   }
 
   object API extends API
@@ -64,6 +66,15 @@ case class Compose[T, R, S](
   override protected def _forward(input: T)(implicit mode: Mode): S = layer2(layer1(input))
 }
 
+case class ComposeOutput[T, R](
+                             override val name: String,
+                             layer1: Layer[T, R], layer2: OutputLayer[R]
+                           ) extends OutputLayer[T](name) {
+  override val layerType: String = s"Compose[$layer1>>$layer2]"
+
+  override protected def _forward(input: T)(implicit mode: Mode): Output = layer2(layer1(input))
+}
+
 case class Concatenate[T, R](
     override val name: String,
     layers: Seq[Layer[T, R]]
@@ -71,6 +82,15 @@ case class Concatenate[T, R](
   override val layerType: String = "Concatenate"
 
   override protected def _forward(input: T)(implicit mode: Mode): Seq[R] = layers.map(_ (input))
+}
+
+case class Concatenate12[T1, R1, T2, R2](
+                              override val name: String,
+                              layer1: Layer[T1, R1],
+                              layer2: Layer[T2, R2]
+                            ) extends Layer[(T1, T2), (R1, R2)](name) {
+  override val layerType: String = "Concatenate12"
+  override protected def _forward(input: (T1, T2))(implicit mode: Mode): (R1, R2) = (layer1(input._1), layer2(input._2))
 }
 
 case class Map[T, R, S, CC[A] <: TraversableLike[A, CC[A]]](
@@ -127,5 +147,14 @@ case class OneHot(override val name: String, numberOfLabels: Int)
 
   override protected def _forward(input: Output)(implicit mode: Mode): Output = {
     ops.Basic.oneHot(input, numberOfLabels, name = name)
+  }
+}
+
+case class Reshape(override val name: String, shape: Shape)
+  extends Layer[Output, Output](name) {
+  override val layerType: String = s"Reshape[$shape]"
+
+  override protected def _forward(input: Output)(implicit mode: Mode): Output = {
+    ops.Basic.reshape(input, shape, name = name)
   }
 }

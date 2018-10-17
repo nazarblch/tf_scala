@@ -333,9 +333,9 @@ final class Shape private (private val array: Array[Int]) extends ProtoSerializa
     * @return One-dimensional tensor representing this shape.
     */
   def toTensor(dataType: DataType = INT32): Tensor = {
-    if (rank == 0)
-      Tensor(dataType)
-    else
+    //if (rank == 0)
+      //Tensor(dataType)
+    //else
       Tensor.fromArrayInt(asArray).cast(dataType)
   }
 

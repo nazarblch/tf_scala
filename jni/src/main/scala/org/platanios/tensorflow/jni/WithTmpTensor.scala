@@ -1,5 +1,6 @@
 package org.platanios.tensorflow.jni
-import native_types.core.framework.{TensorFactory, TensorShape, Tensor => JTensor}
+import native_types.core.framework.{TensorFactory, TensorShape}
+import native_types.core.framework.{Tensor => JTensor}
 import native_types.data_types.CppDataTypes
 
 object WithTmpTensor {

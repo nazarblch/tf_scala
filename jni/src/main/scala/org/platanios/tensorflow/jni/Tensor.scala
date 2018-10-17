@@ -18,6 +18,7 @@ package org.platanios.tensorflow.jni
 import java.nio.ByteBuffer
 
 import native_types.c_api.c_api
+import native_types.c_api.c_api.TF_Tensor
 import org.bytedeco.javacpp.Pointer
 import org.bytedeco.javacpp._
 import org.bytedeco.javacpp.annotation._
@@ -40,14 +41,14 @@ object Tensor {
   // @native def fromBuffer(buffer: ByteBuffer, dataType: Int, shape: Array[Long], byteSize: Long): Long
 
   def fromArrayInt(dataType: Int, data: Array[Int]): Long = {
-    val tft = c_api.TF_AllocateTensor(dataType, Array(data.length.toLong), 1, data.length.toLong * 4)
+    val tft = new TF_Tensor(dataType, Array(data.length.toLong), 1, data.length.toLong * 4)
     val tft_data = c_api.TF_TensorData(tft)
     tft_data.put(new IntPointer(data:_*))
     tft.address()
   }
 
   def fromArrayFloat(dataType: Int, data: Array[Float]): Long = {
-    val tft = c_api.TF_AllocateTensor(dataType, Array(data.length.toLong), 1, data.length.toLong * 4)
+    val tft = new TF_Tensor(dataType, Array(data.length.toLong), 1, data.length.toLong * 4)
     val tft_data = c_api.TF_TensorData(tft)
     tft_data.put(new FloatPointer(data:_*))
     tft.address()
@@ -55,7 +56,7 @@ object Tensor {
 
 
   def fromArrayBool(dataType: Int, data: Array[Boolean]): Long = {
-    val tft = c_api.TF_AllocateTensor(dataType, Array(data.length.toLong), 1, data.length.toLong * 1)
+    val tft = new TF_Tensor(dataType, Array(data.length.toLong), 1, data.length.toLong * 1)
     val tft_data = c_api.TF_TensorData(tft)
     val p = new BoolPointer(data.size)
     data.indices.foreach(i => p.put(i.toLong, data(i)))

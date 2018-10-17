@@ -6,14 +6,17 @@ import java.util.HashMap;
 import java.util.Objects;
 
 public class LibLoader {
+
+    static String workingDir = System.getProperty("user.dir");
+
     public static void load() {
-        System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so");
-        System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so");
-        System.load("/home/nazar/tensorflow_scala/so/libnative_types.so");
+        //System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so");
+        //System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so");
+        System.load(workingDir + "/so/libnative_types.so");
     }
 
-    public static File core_file = new File("/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/core");
-    public static File framework_file = new File("/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/core/framework");
+    public static File core_file = new File(workingDir +"/jni/src/main/native/include/tensorflow/core");
+    public static File framework_file = new File(workingDir +"/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/core/framework");
 
     private static HashMap<String, File> map = new HashMap<String, File>();
     static {

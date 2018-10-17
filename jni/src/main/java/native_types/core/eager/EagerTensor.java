@@ -1,9 +1,10 @@
 package native_types.core.eager;
 
+import native_types.core.framework.Tensor;
 
 import native_types.c_api.c_api;
 import native_types.c_api.eager.c_api.*;
-import native_types.core.framework.Tensor;
+
 import native_types.core.framework.TensorFactory;
 import native_types.core.framework.TensorShape;
 import native_types.data_types.CppDataTypes;
@@ -14,9 +15,7 @@ import org.platanios.tensorflow.jni.WithTmpTensor;
 
 import java.util.*;
 
-import static native_types.c_api.c_api.TF_GetCode;
-import static native_types.c_api.c_api.TF_NewStatus;
-import static native_types.c_api.c_api.throwExeptionByCode;
+import static native_types.c_api.c_api.*;
 import static native_types.c_api.eager.c_api.*;
 import static native_types.data_types.CppDataTypes.DT_INT32;
 
@@ -33,21 +32,31 @@ public class EagerTensor extends Pointer {
         return handle;
     }
 
-    protected static class DeleteDeallocator extends TFE_TensorHandle implements Pointer.Deallocator {
-        DeleteDeallocator(TFE_TensorHandle s) { super(s); }
-        @Override public void deallocate() {
-            System.out.println("delete EagerTensor");
-            TFE_DeleteTensorHandle(this);
-        }
-    }
+//    protected static class DeleteDeallocator extends TFE_TensorHandle implements Pointer.Deallocator {
+//        DeleteDeallocator(TFE_TensorHandle s) { super(s); }
+//        @Override public void deallocate() {
+//            System.out.println("delete EagerTensor");
+//            TFE_DeleteTensorHandle(this);
+//        }
+//    }
 
     public EagerTensor(Tensor t) {
         super((Pointer)null);
-        TFE_TensorHandle h = TFE_NewTensorHandle(t);
+        TFE_TensorHandle h = new TFE_TensorHandle(t);
         if (h != null) {
             handle = h;
             dtype = t.dtype();
-            deallocator(new DeleteDeallocator(handle));
+           // deallocator(new DeleteDeallocator(handle));
+        }
+    }
+
+    public EagerTensor(c_api.TF_Tensor t) {
+        super((Pointer)null);
+        TFE_TensorHandle h = new TFE_TensorHandle(t);
+        if (h != null) {
+            handle = h;
+            dtype = TF_TensorType(t);
+            // deallocator(new DeleteDeallocator(handle));
         }
     }
 
@@ -56,7 +65,7 @@ public class EagerTensor extends Pointer {
         if (h != null) {
             handle = h;
             dtype = TFE_TensorHandleDataType(h);
-            deallocator(new DeleteDeallocator(handle));
+            //deallocator(new DeleteDeallocator(handle));
         }
     }
 
@@ -128,7 +137,7 @@ public class EagerTensor extends Pointer {
 
     public EagerTensor reshape(TensorShape shape) {
         Tensor t = shape.toTensor();
-        TFE_TensorHandle shapeHandle = TFE_NewTensorHandle(t);
+        TFE_TensorHandle shapeHandle = new TFE_TensorHandle(t);
         String[] attrNames = {"Tshape"};
         EagerTensor[] handles = {new EagerTensor(shapeHandle)};
         EagerTensor res = exec_op("Reshape", attrNames, handles, new HashMap<>());

@@ -1,6 +1,8 @@
 package native_types.core.framework;
 
+import native_types.c_api.c_api;
 import native_types.utils.StringArray;
+import org.apache.commons.lang.NotImplementedException;
 import org.bytedeco.javacpp.*;
 import org.apache.commons.lang.ArrayUtils;
 
@@ -12,6 +14,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static native_types.c_api.c_api.TF_TensorData;
 import static native_types.data_types.CppDataTypes.*;
 
 public class TensorFactory<T> {
@@ -33,12 +36,10 @@ public class TensorFactory<T> {
 
     /** Returns {@code createBuffer(0)}. */
     private  <B extends Buffer> B createBuffer(Tensor t) {
-        return (B)createBuffer(t, 0);
+        return (B)createBuffer(t.tensor_data(), 0, t.TotalBytes());
     }
 
-    private  <B extends Buffer> B createBuffer(Tensor t, int index) {
-        BytePointer ptr = t.tensor_data();
-        long size = t.TotalBytes();
+    private  <B extends Buffer> B createBuffer(BytePointer ptr, int index, long size) {
         switch (dtype) {
             case DT_COMPLEX64:
             case DT_FLOAT:    return (B)new FloatPointer(ptr).position(index).capacity(size/4).asBuffer();
@@ -59,7 +60,7 @@ public class TensorFactory<T> {
         return null;
     }
 
-    private  <B extends Buffer> void putData(B b, Object data) {
+    private  <B extends Buffer> void putArray(B b, Object data) {
 
         switch (dtype) {
             case DT_COMPLEX64:
@@ -86,61 +87,51 @@ public class TensorFactory<T> {
     }
 
 
-    public Tensor fill(T v) {
-
-        Tensor t =  new Tensor(dtype, new TensorShape(shape));
-        List<T> data = Collections.nCopies((int) shape_product, v);
-        putData(t, data.toArray());
-
-        return t;
-    }
-
-
-    private void putData(Tensor t, Object[] data) {
-
-        BytePointer ptr = t.tensor_data();
-        long size = t.TotalBytes();
-        ByteBuffer b = ptr.position(0).capacity(size).asBuffer();
+    private void putObjectArray(ByteBuffer b, List<T> data) {
 
         switch (dtype) {
-            case DT_COMPLEX64:
+            case DT_COMPLEX64: throw new NotImplementedException("DT_COMPLEX64");
             case DT_FLOAT:
-                for(Object o: data) {
-                   b.putFloat((Float) o);
-                }
+                putArray(b.asFloatBuffer(),
+                        ArrayUtils.toPrimitive(data.toArray(new Float[0])));
                 return;
             case DT_DOUBLE:
-                for(Object o: data) {
-                    b.putDouble((Double) o);
-                }
+                putArray(b.asDoubleBuffer(),
+                        ArrayUtils.toPrimitive(data.toArray(new Double[0])));
                 return;
             case DT_QINT32:
             case DT_INT32:
-                for(Object o: data) {
-                    b.putInt((Integer) o);
-                }
+                putArray(b.asIntBuffer(),
+                        ArrayUtils.toPrimitive(data.toArray(new Integer[0])));
                 return;
             case DT_BOOL:
+                for(Object o: data) {
+                    Byte vOut = (byte)((Boolean) o ? 1:0);
+                    b.put(vOut);
+                }
+                return;
             case DT_QUINT8:
             case DT_UINT8:
             case DT_QINT8:
             case DT_INT8:
-                for(Object o: data) {
-                    b.put((Byte) o);
-                }
+                putArray(b,
+                        ArrayUtils.toPrimitive(data.toArray(new Byte[0])));
                 return;
             case DT_BFLOAT16:
             case DT_INT16:
-                for(Object o: data) {
-                    b.putShort((Short) o);
-                }
+                putArray(b.asShortBuffer(),
+                        ArrayUtils.toPrimitive(data.toArray(new Short[0])));
                 return;
             case DT_INT64:
-                for(Object o: data) {
-                    b.putLong((Long) o);
-                }
+                putArray(b.asLongBuffer(),
+                        ArrayUtils.toPrimitive(data.toArray(new Long[0])));
                 return;
             case DT_STRING:
+                StringArray a = new StringArray(new BytePointer(b)).capacity(data.size()).limit(data.size());
+                for (int i = 0; i < a.capacity(); i++) {
+                    a.position(i).put((String) data.get(i));
+                }
+                return;
             default: assert false;
         }
     }
@@ -197,37 +188,30 @@ public class TensorFactory<T> {
      * Tensor<String> m = Tensor.create(matrix, String.class);
      * }</pre>
      */
-    public Tensor create(Object obj) throws Exception {
-        if(!objectCompatWithType(obj)) {
-            throw new IllegalArgumentException( "DataType of object does not match T (expected "
-                    + dtype
-                    + ", got "
-                    + dataTypeOf(obj)
-                    + ")");
-        }
-
-        if(!objectCompatWithShape(obj)) {
-            long[] os = new long[numDimensions(obj, dtype)];
-            fillShape(obj, 0, os);
-            throw new IllegalArgumentException( "Shape of object does not match shape (expected "
-                    + Arrays.toString(shape)
-                    + ", got "
-                    + Arrays.toString(os)
-                    + ")");
-        }
-
+    public Tensor create(Object obj) {
+        checkObjectShapeCompatibility(obj);
         Tensor t =  new Tensor(dtype, new TensorShape(shape));
-
-        if (dtype != DT_STRING) {
-            putData(t, flatten(obj).toArray());
-        } else {
-            throw new Exception("not implemented");
-        }
+        putObjectArray(t.getBuffer(), flatten(obj));
         return t;
     }
 
 
+    public c_api.TF_Tensor createTF_Tensor(Object data) {
+        checkObjectShapeCompatibility(data);
+        assert  (dtype != DT_STRING);
+        c_api.TF_Tensor t = new c_api.TF_Tensor(dtype, shape, shape.length, shape_product * elemByteSize(dtype));
+        ByteBuffer b = new BytePointer(TF_TensorData(t)).position(0).capacity(shape_product * elemByteSize(dtype)).asByteBuffer();
+        putObjectArray(b, flatten(data));
+        return t;
+    }
 
+    public c_api.TF_Tensor createStringTF_Tensor(String[] data) {
+        assert (dtype == DT_STRING);
+        Tensor t = createStringTensor(data);
+        ByteBuffer b = t.getBuffer();
+        t.deallocate();
+        return createFromBufferTF_Tensor(b.capacity(), b);
+    }
 
     public Tensor createStringTensor(String[] data) {
         Tensor t = new Tensor(DT_STRING,  new TensorShape(shape));
@@ -240,45 +224,28 @@ public class TensorFactory<T> {
     }
 
 
-    private List<T> flatten(Object object) {
-        List<T> l = new ArrayList<T>();
-        if (object.getClass().isArray()) {
-            for (int i = 0; i < Array.getLength(object); i++) {
-                l.addAll(flatten(Array.get(object, i)));
-            }
-        } else if (object instanceof List) {
-            for (Object element : (List<?>) object) {
-                l.addAll(flatten(element));
-            }
-        } else {
-            l.add((T) object);
-        }
-        return l;
-    }
-
-
-
-    public Tensor createFromArray(Object data) {
-
-        if(!objectCompatWithType(data)) {
-            throw new IllegalArgumentException( "DataType of object does not match T (expected "
-                    + dtype
-                    + ", got "
-                    + dataTypeOf(data)
-                    + ")");
-        }
-
-        if (Array.getLength(data) != shape_product) {
-            throw new IllegalArgumentException( "Shape of object does not match shape (expected ["
-                    + shape_product
-                    + "], got ["
-                    + Array.getLength(data)
-                    + "])");
-        }
-
+    public Tensor createFromArray(Object obj) {
+        checkObjectShapeCompatibility(obj);
         Tensor t = new Tensor(dtype, new TensorShape(shape));
         Buffer b = createBuffer(t);
-        putData(b, data);
+        if(dtype != DT_STRING) {
+            putArray(b, obj);
+        } else {
+            return null;
+           // putObjectArray(t.getBuffer(), Arrays.asList((String[]) obj));
+        }
+        return t;
+    }
+
+    public c_api.TF_Tensor createFromArrayTF_Tensor(Object data) {
+        c_api.TF_Tensor t = new c_api.TF_Tensor(dtype, shape, shape.length, shape_product * elemByteSize(dtype));
+        Buffer b = createBuffer(new BytePointer(TF_TensorData(t)), 0, shape_product * elemByteSize(dtype));
+        if(dtype != DT_STRING) {
+            putArray(b, data);
+        } else {
+            return null;
+            // putObjectArray(new BytePointer(TF_TensorData(t)).asBuffer(), (String[]) data);
+        }
         return t;
     }
 
@@ -293,9 +260,87 @@ public class TensorFactory<T> {
         }
 
         Tensor t = new Tensor(dtype, new TensorShape(shape));
-        ByteBuffer b = t.tensor_data().position(0).capacity(shape_product).asByteBuffer();
+        ByteBuffer b = t.tensor_data().position(0).capacity(buffer.capacity()).asByteBuffer();
         b.put(buffer);
         return t;
+    }
+
+
+    public c_api.TF_Tensor createFromBufferTF_Tensor(long numBytes, ByteBuffer buffer) {
+
+        if (dtype != DT_STRING && numBytes / elemByteSize(dtype) != shape_product) {
+            throw new IllegalArgumentException( "Shape of object does not match shape (expected ["
+                    + shape_product
+                    + "], got ["
+                    + numBytes / elemByteSize(dtype)
+                    + "])");
+        }
+
+        c_api.TF_Tensor t = new c_api.TF_Tensor(dtype, shape, shape.length, buffer.capacity());
+        ByteBuffer b = new BytePointer(TF_TensorData(t)).position(0).capacity(buffer.capacity()).asByteBuffer();
+        b.put(buffer);
+        return t;
+    }
+
+
+    public Tensor fill(T v) {
+        Tensor t =  new Tensor(dtype, new TensorShape(shape));
+        List<T> data = Collections.nCopies((int) shape_product, v);
+        if(dtype != DT_STRING) {
+            putArray(t.getBuffer(), data.toArray());
+        } else {
+            putObjectArray(t.getBuffer(), data);
+        }
+        return t;
+    }
+
+    public c_api.TF_Tensor fillTF_Tensor(T v) {
+        c_api.TF_Tensor t = new c_api.TF_Tensor(dtype, shape, shape.length, shape_product * elemByteSize(dtype));
+        List<T> data = Collections.nCopies((int) shape_product, v);
+        if(dtype != DT_STRING) {
+            ByteBuffer b = new BytePointer(TF_TensorData(t)).position(0).capacity(shape_product * elemByteSize(dtype)).asByteBuffer();
+            putObjectArray(b, data);
+        } else {
+            return null;
+        }
+        return t;
+    }
+
+
+    private List<T> flatten(Object object) {
+        List<T> l = new ArrayList<T>();
+
+        if (object.getClass().isArray() && !object.getClass().getComponentType().isArray()) {
+            for (int i = 0; i < Array.getLength(object); i++) {
+                l.add((T) Array.get(object, i));
+            }
+        } else if (object.getClass().isArray()) {
+            for (int i = 0; i < Array.getLength(object); i++) {
+                l.addAll(flatten(Array.get(object, i)));
+            }
+        }
+        return l;
+    }
+
+
+    private void checkObjectShapeCompatibility(Object obj) {
+        if(!objectCompatWithType(obj)) {
+            throw new IllegalArgumentException( "DataType of object does not match T (expected "
+                    + dtype
+                    + ", got "
+                    + dataTypeOf(obj)
+                    + ")");
+        }
+
+        long[] os = new long[numDimensions(obj, dtype)];
+        fillShape(obj, 0, os);
+        if(numElements(os) != shape_product) {
+            throw new IllegalArgumentException( "Shape of object does not match shape (expected "
+                    + Arrays.toString(shape)
+                    + ", got "
+                    + Arrays.toString(os)
+                    + ")");
+        }
     }
 
     private static int numElements(long[] shape) {
@@ -370,9 +415,6 @@ public class TensorFactory<T> {
      */
     private static int numDimensions(Object o, int dtype) {
         int ret = numArrayDimensions(o);
-        if (dtype == DT_STRING && ret > 0) {
-            return ret - 1;
-        }
         return ret;
     }
 

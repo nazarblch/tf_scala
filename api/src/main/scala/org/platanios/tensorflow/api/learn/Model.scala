@@ -333,7 +333,7 @@ object Model {
       metricResets: Seq[Op])
 }
 
-private[learn] class SimpleInferenceModel[IT, IO, ID, IS, I] private[learn](
+class SimpleInferenceModel[IT, IO, ID, IS, I] (
     val input: Input[IT, IO, _, ID, IS],
     val layer: Layer[IO, I]
 ) extends InferenceModel[IT, IO, ID, IS, I] {
@@ -419,6 +419,7 @@ private[learn] class SimpleSupervisedTrainableModel[IT, IO, ID, IS, I, TT, TO, T
     Model.SupervisedTrainOps(
       inputIterator, inputIteratorNext, layerOutput, trainLayerOutput, lossOutput, gradientsAndVariables, trainOp)
   }
+
 
   override def buildEvaluateOps(
       metrics: Seq[Metric[(I, T), Output]]

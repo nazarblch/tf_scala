@@ -26,6 +26,7 @@ import org.platanios.tensorflow.api.types._
 import org.platanios.tensorflow.jni.generated.tensors.{Basic => NativeTensorOpsBasic}
 import java.nio.charset.StandardCharsets
 
+import native_types.c_api.eager.c_api.TFE_Context
 import org.platanios.tensorflow.api.ops.EagerOp
 
 import scala.language.postfixOps
@@ -269,10 +270,7 @@ private[api] trait Basic {
     b.addAttribute("T", input.dataType)
     b.addAttribute("Tshape", shape.dataType)
     b.addInputs(input, shape)
-    b.build().execute()
-
-    //Tensor.fromNativeHandle(
-      //NativeTensorOpsBasic.reshape(executionContext.value.nativeHandle, input.nativeHandle, shape.nativeHandle))
+    b.build(eagerExecutionContext).execute()
   }
 
   /** $OpDocBasicTranspose

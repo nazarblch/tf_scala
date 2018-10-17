@@ -104,6 +104,7 @@ class TensorSuite extends JUnitSuite {
     val tensor = Tensor(Tensor(Tensor(2, 3), Tensor(0, 0), Tensor(5, 7)),
                         Tensor(Tensor(1, 23), Tensor(4, -5), Tensor(7, 9)),
                         Tensor(Tensor(56, 1), Tensor(-2, -4), Tensor(-7, -9)))
+
     assert(tensor.shape === Shape(3, 3, 2))
     assert(tensor(::, NewAxis, 1 :: 3, 0 :: -1).shape === Shape(3, 1, 2, 1))
     assert(tensor(---).shape === Shape(3, 3, 2))

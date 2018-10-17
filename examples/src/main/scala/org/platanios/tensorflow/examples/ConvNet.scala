@@ -6,9 +6,12 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.platanios.tensorflow.data.image.ImageByUrlLoader
 import org.platanios.tensorflow.api._
 import org.platanios.tensorflow.api.learn.TRAINING
-import org.platanios.tensorflow.api.learn.layers.Layer
+import org.platanios.tensorflow.api.learn.estimators.IterativeEstimator
+import org.platanios.tensorflow.api.learn.layers.{Identity, Input, Layer}
+import org.platanios.tensorflow.api.learn.models.TrainableModel
 import org.platanios.tensorflow.api.ops.{Basic, NN}
 import org.platanios.tensorflow.api.ops.NN.{CNNDataFormat, NWCFormat, SameConvPadding}
+import org.platanios.tensorflow.api.ops.io.data.IterableDataset
 import org.tensorflow.framework.TensorProto
 import org.platanios.tensorflow.data.serializer.JavaGenericSerializer
 
@@ -39,7 +42,10 @@ object ConvNet extends App with JavaGenericSerializer {
 
   // genericSave(img2label, "img2label.bin")
   val img2label: Array[(Array[Float], Int)] = genericLoad("img2label.bin")
-  println("saved")
+  val shuffled: Array[(Array[Float], Int)] = suffle(img2label)
+  val train_data = shuffled.drop(1000)
+  val test_data = shuffled.take(1000)
+  println("train " + train_data.length)
 
   val image_size = 80
 
@@ -50,109 +56,84 @@ object ConvNet extends App with JavaGenericSerializer {
     Tensor.fromArrayInt(values)
   }
 
-  def generateData(n: Int) = {
-    val shuffled: Array[(Array[Float], Int)] = suffle(img2label)
-    val x: Array[Int] = shuffled.take(n).flatMap(_._1).map(_.toInt)
-//    val resx = Tensor.fromArrayInt(x).reshape(Shape(n, image_size, image_size, 1))
-//    val im = ImageByUrlLoader.tensorToImage(resx(10, ::, ::, ::).reshape(Shape(1, image_size, image_size, 1)))
-//    ImageByUrlLoader.displayImage(im)
+  def generateTrainData(from: Int, to: Int) = {
+    val data = train_data.slice(from, to)
+    (Tensor.fromArrayFloat(data.flatMap(_._1)).reshape(Shape(data.length, image_size, image_size, 1)), Tensor(data.map(_._2)).reshape(Shape(data.length)))
+  }
 
-    (Tensor.fromArrayInt(x).reshape(Shape(n, image_size, image_size, 1)), Tensor(shuffled.take(n).map(_._2)).reshape(Shape(n)))
+  def generateTestData(n: Int) = {
+    val data = test_data.take(n)
+    (Tensor.fromArrayFloat(data.flatMap(_._1)).reshape(Shape(data.length, image_size, image_size, 1)), Tensor(data.map(_._2)).reshape(Shape(data.length)))
   }
 
   val batch_size = 100
 
 
-  val batchX_placeholder = tf.placeholder(INT32, Shape(batch_size, image_size, image_size, 1))
-  val batchY_placeholder = tf.placeholder(INT32, Shape(batch_size))
+  val model = {
 
-  def creat_net(name: String, outSize: Int) = {
-    tf.learn.Cast("Input/Cast" + name, FLOAT32) >>
-    tf.learn.Conv2D("Layer_0/Conv2D"  + name, Shape(3, 3, 1, 20), 2, 2, SameConvPadding) >>
-    tf.learn.AddBias("Layer_0/Bias"  + name) >>
-    tf.learn.ReLU("Layer_0/ReLU"  + name, 0.1f) >>
-    tf.learn.MaxPool("Layer_0/MaxPool"  + name, Seq(1, 3, 3, 1), 1, 1, SameConvPadding) >>
-    tf.learn.Conv2D("Layer_1/Conv2D"  + name, Shape(2, 2, 20, 32), 1, 1, SameConvPadding) >>
-    tf.learn.AddBias("Bias_1"  + name) >>
-    tf.learn.ReLU("Layer_1/ReLU"  + name, 0.1f) >>
-    tf.learn.MaxPool("Layer_1/MaxPool"  + name, Seq(1, 2, 2, 1), 1, 1, SameConvPadding) >>
-    tf.learn.Flatten("Layer_3/Flatten"  + name) >>
-    tf.learn.Dropout("Layer_3/Drop"  + name, 0.5f) >>
-    tf.learn.Linear("Layer_3/Linear"  + name, 256) >> tf.learn.ReLU("Layer_3/ReLU"  + name, 0.1f) >>
-    tf.learn.Linear("Layer_4/Linear"  + name, 128) >> tf.learn.ReLU("Layer_4/ReLU"  + name, 0.1f) >>
-    tf.learn.Linear("OutputLayer/Linear"  + name, outSize)  >> tf.learn.ReLU("Layer_5/ReLU"  + name, 0.1f)
+    val X_place = Input(FLOAT32, Shape(batch_size, image_size, image_size, 1), "X")
+    val Y_place = Input(INT32, Shape(batch_size), "Y")
+
+    val layer =
+      tf.learn.Conv2D("Layer_0/Conv2D", Shape(4, 4, 1, 30), 2, 2, SameConvPadding) >>
+      tf.learn.AddBias("Layer_0/Bias") >>
+      tf.learn.ReLU("Layer_0/ReLU", 0.1f) >>
+      tf.learn.MaxPool("Layer_0/MaxPool" , Seq(1, 2, 2, 1), 1, 1, SameConvPadding) >>
+      tf.learn.Conv2D("Layer_1/Conv2D" , Shape(2, 2, 30, 42), 1, 1, SameConvPadding) >>
+      tf.learn.AddBias("Bias_1" ) >>
+      tf.learn.ReLU("Layer_1/ReLU" , 0.1f) >>
+      tf.learn.MaxPool("Layer_1/MaxPool" , Seq(1, 2, 2, 1), 1, 1, SameConvPadding) >>
+        tf.learn.Conv2D("Layer_2/Conv2D" , Shape(2, 2, 42, 42), 1, 1, SameConvPadding) >>
+        tf.learn.AddBias("Bias_2" ) >>
+        tf.learn.ReLU("Layer_2/ReLU" , 0.1f) >>
+        tf.learn.MaxPool("Layer_2/MaxPool" , Seq(1, 2, 2, 1), 1, 1, SameConvPadding) >>
+      tf.learn.Flatten("Layer_3/Flatten" ) >>
+      tf.learn.Dropout("Layer_3/Drop" , 0.5f) >>
+      tf.learn.Linear("Layer_3/Linear" , 556) >> tf.learn.ReLU("Layer_3/ReLU" , 0.1f) >>
+        tf.learn.Dropout("Layer_4/Drop" , 0.5f) >>
+      tf.learn.Linear("Layer_4/Linear" , 228) >> tf.learn.ReLU("Layer_4/ReLU" , 0.1f) >>
+      tf.learn.Linear("OutputLayer/Linear" , 130)
+
+    val loss = tf.learn.SparseSoftmaxCrossEntropy("Loss/CrossEntropy") >>
+      tf.learn.Mean("Loss/Mean") // >> tf.learn.ScalarSummary("Loss/Summary", "Loss")
+
+    val optimizer = tf.train.RMSProp(0.003)
+
+    new TrainableModel(X_place, layer, Y_place, Identity[Output]("Iden"), loss, optimizer, tf.learn.ClipGradientsByGlobalNorm(1.0f))
   }
 
-//
-//  val weights = tf.variable("Weights1", FLOAT32, Shape(3, 3, 1, 5))
-//  val conv1 = NN.conv2D(batchX_placeholder, weights, 1, 1,  SameConvPadding, NWCFormat, (1, 1, 1, 1), true)
-//  val relu1 = NN.relu(conv1, 0.1f, "relu1")
-//  val flatten = relu1.reshape(Shape(batch_size, -1))
-//  val linear = NN.linear(flatten, tf.variable("W2", FLOAT32, Shape(flatten.shape(1), 130)))
 
-  val layer1 = creat_net("_1", 10)
-  val layer2 = creat_net("_2", 10)
-  val layer3 = creat_net("_3", 10)
-  val layer4 = creat_net("_4", 10)
-  val layer5 = creat_net("_5", 10)
-  val layer6 = creat_net("_6", 10)
 
-  val out1234 = tf.concatenate(Seq(
-    layer1.forward(batchX_placeholder)(TRAINING),
-    layer2.forward(batchX_placeholder)(TRAINING),
-    layer3.forward(batchX_placeholder)(TRAINING),
-    layer4.forward(batchX_placeholder)(TRAINING),
-    layer5.forward(batchX_placeholder)(TRAINING),
-    layer6.forward(batchX_placeholder)(TRAINING)
-  ), 1)
+  val accMetric = tf.metrics.MapMetric(
+    (v: (Output, Output)) => (v._1.argmax(-1), v._2), tf.metrics.Accuracy())
 
-  val out1 = NN.linear(out1234, tf.variable("W1", FLOAT32, Shape(out1234.shape(1), 80)))
-  val relu1 = NN.relu(out1, 0.1f, "relu1")
-  val out = NN.linear(relu1, tf.variable("W2", FLOAT32, Shape(out1.shape(1), 130)))
 
-  val predictions: Output = tf.argmax(out, -1)
+  val estimator = new IterativeEstimator(model, Seq(accMetric), false)
 
-  val losses = tf.sparseSoftmaxCrossEntropy(out, batchY_placeholder)
-  val total_loss: Output = tf.sum(losses) / batch_size
 
-  val train_step = tf.train.AdaGrad(0.1).minimize(total_loss)
+  val total_series_length: Int = 640
 
-  val session = Session()
-  session.run(targets = tf.globalVariablesInitializer())
+  println("test data")
 
-  val total_series_length: Int = 1000
+  val (xt, yt) = generateTestData(total_series_length / 2)
+  val datasetTest = new IterableDataset(model, Seq(xt, yt), batch_size)
 
-  for(epoch <- 0 to 10000) {
+
+  for(epoch <- 0 to 5 * train_data.size / total_series_length) {
     println("epoch=" + epoch)
 
-    val (x,y) = generateData(total_series_length)
-    println("generated")
+    val from = (total_series_length * epoch) % (train_data.size - total_series_length)
+    val (x, y) = generateTrainData(from, from + total_series_length)
 
-    for (i <- 0 until (total_series_length /  batch_size)) {
+    val dataset_train = new IterableDataset(model, Seq(x, y), batch_size)
+    estimator.train(dataset_train)
 
-      val batchX = x(i * batch_size :: (i * batch_size + batch_size))
-      val batchY = y(i * batch_size :: (i * batch_size + batch_size))
+    dataset_train.close()
 
-      println(s"True value: ${batchY.summarize()}")
-
-      val feeds = Map(
-        batchX_placeholder -> batchX,
-        batchY_placeholder -> batchY
-      )
-      val fetches: Seq[Output] = Seq(total_loss, predictions)
-      val trainLoss = session.run(feeds = feeds, fetches = fetches, targets = train_step)
-
-      println(trainLoss.head.scalar)
-
-      println(s"Predicted value: ${trainLoss(1).summarize()}")
-
-      session.deleteNativeReferences()
-
-
-    }
-
-    x.close()
-    y.close()
+    println("Test")
+    val eval = estimator.evaluate(datasetTest)
+    println(eval.head.scalar)
+    eval.foreach(_.close())
 
 
   }

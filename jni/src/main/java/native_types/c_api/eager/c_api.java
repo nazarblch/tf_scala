@@ -1,16 +1,14 @@
 package native_types.c_api.eager;
 
-import native_types.core.framework.Tensor;
+
 import native_types.loader.LibLoader;
 import org.bytedeco.javacpp.BytePointer;
-import org.bytedeco.javacpp.IntPointer;
 import org.bytedeco.javacpp.Pointer;
 import org.bytedeco.javacpp.PointerPointer;
 import org.bytedeco.javacpp.annotation.*;
 import native_types.c_api.c_api.TF_Status;
 import org.platanios.tensorflow.jni.ExecWithStatusCheck;
-import scala.Array;
-import scala.Function1;
+import native_types.core.framework.Tensor;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -22,8 +20,6 @@ import static native_types.c_api.c_api.*;
 @Platform(include = {
         "/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/c/eager/c_api.h",
         "/home/nazar/Downloads/javacpp-presets-master/tensorflow/src/main/resources/org/bytedeco/javacpp/include/tensorflow_adapters.h",
-        //"/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/c/eager/c_api_internal.h",
-        //"/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/c/eager/api_helper.h",
         "/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/c/c_api.h"
 })
 
@@ -37,29 +33,103 @@ public class c_api {
         context = createContext();
     }
 
-    @Opaque public static class TFE_TensorHandle extends Pointer {
-        /** Empty constructor. Calls {@code super((Pointer)null)}. */
-        public TFE_TensorHandle() { super((Pointer)null); }
-        /** Pointer cast constructor. Invokes {@link Pointer#Pointer(Pointer)}. */
-        public TFE_TensorHandle(Pointer p) { super(p); }
 
-        public TFE_TensorHandle(long address) {super((Pointer)null); super.address = address; }
+    @Opaque public static class TFE_TensorHandle extends Pointer {
+
+
+        protected static class DeleteDeallocator extends TFE_TensorHandle implements Pointer.Deallocator {
+
+            DeleteDeallocator(TFE_TensorHandle s) {super(s);}
+            @Override public void deallocate() {
+                if(!isNull()) {
+                    // System.out.println("delete TFE_TensorHandle " + this);
+                    TFE_DeleteTensorHandle(this);
+                    setNull();
+                }
+            }
+        }
+
+        protected TFE_TensorHandle(Pointer p) {
+            super(p);
+        }
+
+        //TODO: Delete
+        public TFE_TensorHandle(long address) {
+            super((Pointer)null);
+            super.address = address;
+            deallocator(new DeleteDeallocator(this));
+        }
+
+        public TFE_TensorHandle(Tensor t) {
+            super(TFE_NewTensorHandle(t));
+            // System.out.println("create handle");
+            deallocator(new DeleteDeallocator(this));
+        }
+
+        public TFE_TensorHandle(TF_Tensor t) {
+            super(TFE_NewTensorHandle(t));
+            // System.out.println("create handle");
+            deallocator(new DeleteDeallocator(this));
+        }
+
+        @Override public void deallocate() {
+            Deallocator d = deallocator();
+            if (! (d instanceof DeleteDeallocator)) {
+                setDeallocator();
+            }
+            if(!isNull() && d!=null) {
+                super.deallocate();
+                setNull();
+            }
+        }
+
+        void setDeallocator() {
+            deallocator(new DeleteDeallocator(this));
+        }
 
     }
 
     @Opaque public static class TFE_Op extends Pointer {
-        /** Empty constructor. Calls {@code super((Pointer)null)}. */
-        public TFE_Op() { super((Pointer)null); }
+        protected static class DeleteDeallocator extends TFE_Op implements Pointer.Deallocator {
+
+            DeleteDeallocator(TFE_Op s) {super(s);}
+            @Override public void deallocate() {
+                if(!isNull()) {
+                    // System.out.println("delete TFE_Op " + this);
+                    TFE_DeleteOp(this);
+                    setNull();
+                }
+            }
+        }
         /** Pointer cast constructor. Invokes {@link Pointer#Pointer(Pointer)}. */
-        public TFE_Op(Pointer p) { super(p); }
+        private TFE_Op(Pointer p) { super(p); }
+
+        public TFE_Op(String name, TFE_Context context) {
+            super(TFE_NewOp(name, context));
+            deallocator(new DeleteDeallocator(this));
+        }
+
+        @Override public void deallocate() {
+            Deallocator d = deallocator();
+            if (! (d instanceof DeleteDeallocator)) {
+                deallocator(new DeleteDeallocator(this));
+            }
+            if(!isNull() && d!=null) {
+                super.deallocate();
+                setNull();
+            }
+        }
 
     }
 
     @Opaque public static class TFE_Context extends Pointer {
-        /** Empty constructor. Calls {@code super((Pointer)null)}. */
-        public TFE_Context() { super((Pointer)null); }
         /** Pointer cast constructor. Invokes {@link Pointer#Pointer(Pointer)}. */
         public TFE_Context(Pointer p) { super(p); }
+
+        public TFE_Context(long address) {
+            super((Pointer)null);
+            super.address = address;
+        }
 
     }
 
@@ -84,17 +154,23 @@ public class c_api {
 
     public static native TFE_ContextOptions TFE_NewContextOptions();
 
-    public static native TFE_TensorHandle TFE_NewTensorHandle(@Const @ByRef Tensor t);
+    private static native TFE_TensorHandle TFE_NewTensorHandle(@Const @ByRef Tensor t);
 
     public static native TFE_TensorHandle TFE_NewTensorHandle(native_types.c_api.c_api.TF_Tensor t, native_types.c_api.c_api.TF_Status status);
 
+    private static TFE_TensorHandle TFE_NewTensorHandle(native_types.c_api.c_api.TF_Tensor t) {
+        return ExecWithStatusCheck.apply(s -> TFE_NewTensorHandle(t, s));
+    }
+
     public static native @Const Tensor TFE_TensorHandleUnderlyingTensorInHostMemory(TFE_TensorHandle h, native_types.c_api.c_api.TF_Status status);
 
-    public static native TFE_Op TFE_NewOp(TFE_Context ctx, @Cast("const char*") String op_or_function_name, native_types.c_api.c_api.TF_Status status);
+    private static native TFE_Op TFE_NewOp(TFE_Context ctx, @Cast("const char*") String op_or_function_name, native_types.c_api.c_api.TF_Status status);
 
-    public static TFE_Op TFE_NewOp(@Cast("const char*") String op_or_function_name, native_types.c_api.c_api.TF_Status status) {
-        return TFE_NewOp(context, op_or_function_name, status);
+    private static TFE_Op TFE_NewOp(@Cast("const char*") String op_or_function_name, TFE_Context context) {
+        return ExecWithStatusCheck.apply(s -> TFE_NewOp(context, op_or_function_name, s));
     }
+
+    public static native void TFE_DeleteOp(TFE_Op op);
 
     public static native int TFE_TensorHandleNumDims(TFE_TensorHandle h, TF_Status status);
 
@@ -124,9 +200,13 @@ public class c_api {
 
     public static native void TFE_Execute(TFE_Op op, @Cast("TFE_TensorHandle**") PointerPointer<TFE_TensorHandle> retvals, @Cast("int*") int[] num_retvals, TF_Status status);
 
-    public static native TFE_TensorHandle TFE_Exec(TFE_Op op, TF_Status status);
+    private static native TFE_TensorHandle TFE_Exec(TFE_Op op, TF_Status status);
 
-
+    public static TFE_TensorHandle eagerExecute(TFE_Op op) {
+        TFE_TensorHandle handle = ExecWithStatusCheck.apply(s -> TFE_Exec(op, s));
+        handle.setDeallocator();
+        return handle;
+    }
 
     public static native native_types.c_api.c_api.TF_Tensor TFE_TensorHandleResolve(TFE_TensorHandle h, TF_Status status);
 
@@ -138,7 +218,7 @@ public class c_api {
 
     public static native void deleteTensor(Tensor tensor);
 
-    public static TFE_Context createContext() {
+    private static TFE_Context createContext() {
         TFE_ContextOptions options = TFE_NewContextOptions();
         byte async = 0;
         TFE_ContextOptionsSetAsync(options, async);

@@ -2,13 +2,15 @@ package native_types.core.framework;
 
 
 import native_types.adapters.StringPiece;
-import native_types.c_api.eager.c_api;
+import native_types.c_api.eager.c_api.*;
+import native_types.c_api.c_api.*;
 import native_types.cc.client.ClientSession;
 import native_types.cc.framework.InputList;
 import native_types.cc.framework.Output;
 import native_types.cc.framework.OutputVector;
 import native_types.cc.framework.Scope;
 import native_types.core.eager.EagerTensor;
+import native_types.data_types.CppDataTypes;
 import native_types.indexer.TensorIndexer;
 import native_types.loader.LibLoader;
 import native_types.ops.const_ops;
@@ -19,8 +21,15 @@ import org.bytedeco.javacpp.annotation.*;
 import org.bytedeco.javacpp.indexer.FloatIndexer;
 import org.bytedeco.javacpp.indexer.Indexer;
 
-import static native_types.c_api.eager.c_api.deleteTensor;
-import static native_types.c_api.eager.c_api.reshape;
+import java.nio.Buffer;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+
+import static native_types.c_api.c_api.*;
+import static native_types.c_api.eager.c_api.*;
 import static native_types.data_types.CppDataTypes.*;
 
 
@@ -38,32 +47,35 @@ import static native_types.data_types.CppDataTypes.*;
 // "link" tells javacpp which original library should be linked (if not specified, "Abc" will be used)
 @Namespace("tensorflow") @NoOffset public  class Tensor extends Pointer {
 
+    // instead of deallocator
+    TFE_TensorHandle h;
+
     static {
         LibLoader.load();
     }
 
+//    public Tensor(Pointer p) { super(p); }
 
-    public Tensor(Pointer p) { super(p); }
-    /** Native array allocator. Access with {@link Pointer#position(long)}. */
-    public Tensor(long size) { super((Pointer)null); allocateArray(size); }
-    private native void allocateArray(long size);
-    @Override public Tensor position(long position) {
-        return (Tensor)super.position(position);
-    }
-
-    public Tensor() { super((Pointer)null); allocate(); }
-    private native void allocate();
+//    /** Native array allocator. Access with {@link Pointer#position(long)}. */
+//    public Tensor(long size) { super((Pointer)null); allocateArray(size); }
+//    private native void allocateArray(long size);
+//    @Override public Tensor position(long position) {
+//        return (Tensor)super.position(position);
+//    }
+//
+//    public Tensor() { super((Pointer)null); allocate(); }
+//    private native void allocate();
 
     public Tensor(@Cast("tensorflow::DataType") int type, @Const @ByRef TensorShape shape) {
         super((Pointer)null);
         allocate(type, shape);
-        // Pointer.withDeallocator(this);
+        h = new TFE_TensorHandle(this);
     }
 
     public Tensor(@Cast("tensorflow::DataType") int type, long[] shape) {
         super((Pointer)null);
         allocate(type, new TensorShape(shape));
-        // Pointer.withDeallocator(this);
+        h = new TFE_TensorHandle(this);
     }
 
     private native void allocate(@Cast("tensorflow::DataType") int type, @Const @ByRef TensorShape shape);
@@ -82,7 +94,11 @@ import static native_types.data_types.CppDataTypes.*;
 
     public native @Cast("size_t") long TotalBytes();
 
-
+    public ByteBuffer getBuffer() {
+        BytePointer ptr = tensor_data();
+        long size = TotalBytes();
+        return ptr.position(0).capacity(size).asBuffer();
+    }
 
     public <I extends Indexer> I createIndexer() {
         return (new TensorIndexer(this).createIndexer());
@@ -91,6 +107,7 @@ import static native_types.data_types.CppDataTypes.*;
 
     @Override public void deallocate() {
         if(!isNull()) {
+            System.out.println("delete");
             deleteTensor(this);
             setNull();
         }
@@ -98,24 +115,23 @@ import static native_types.data_types.CppDataTypes.*;
 
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
 
 
         long[] shape = {2, 3};
         float[] data = {1, 2, 3, 4, 5, 6};
         TensorFactory tf = new TensorFactory(DT_FLOAT, shape);
+        TF_Tensor tft = tf.createFromArrayTF_Tensor(data);
 
-        try(Tensor abc = tf.createFromArray(data)) {
+        Tensor abc = tf.createFromArray(data);
+        System.out.println("test");
+        EagerTensor e = new EagerTensor(tft);
+        System.gc();
+        Thread.sleep(1000);
+        // EagerTensor e1 = e.reshape(new TensorShape(3,2));
+        System.out.println(e.toNativeTensor().createIndexer().toString());
 
-            EagerTensor e = new EagerTensor(abc);
-            EagerTensor e1 = e.reshape(new TensorShape(3,2));
 
-
-            System.out.println(e1.toNativeTensor().createIndexer().toString());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
 
 //        Scope scope = Scope.NewRootScope();
 //

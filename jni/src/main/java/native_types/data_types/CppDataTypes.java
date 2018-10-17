@@ -46,6 +46,7 @@ public class CppDataTypes {
         classDataTypes.put(Byte.class, DT_STRING);
         classDataTypes.put(boolean.class, DT_BOOL);
         classDataTypes.put(Boolean.class, DT_BOOL);
+        classDataTypes.put(String.class, DT_STRING);
     }
 
 

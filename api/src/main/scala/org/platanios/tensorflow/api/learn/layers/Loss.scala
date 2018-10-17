@@ -15,6 +15,7 @@
 
 package org.platanios.tensorflow.api.learn.layers
 
+import org.platanios.tensorflow.api.core.Shape
 import org.platanios.tensorflow.api.learn.{Mode, layers}
 import org.platanios.tensorflow.api.ops
 import org.platanios.tensorflow.api.ops.Output
@@ -41,6 +42,7 @@ object Loss {
     val SigmoidCrossEntropy      : layers.SigmoidCrossEntropy.type       = layers.SigmoidCrossEntropy
     val LogPoissonLoss           : layers.LogPoissonLoss.type            = layers.LogPoissonLoss
     val SequenceLoss             : layers.SequenceLoss.type              = layers.SequenceLoss
+    val SigmoidCrossEntropyPenalty: layers.SigmoidCrossEntropyPenalty.type = layers.SigmoidCrossEntropyPenalty
   }
 
   object API extends API
@@ -79,6 +81,16 @@ case class SigmoidCrossEntropy(override val name: String)
 
   override protected def _forward(input: (Output, Output))(implicit mode: Mode): Output = {
     ops.NN.sigmoidCrossEntropy(input._1, input._2, name = name)
+  }
+}
+
+case class SigmoidCrossEntropyPenalty(override val name: String)
+  extends Loss[(Output, Output)](name) {
+  override val layerType: String = "SigmoidCrossEntropyPenalty"
+
+  override protected def _forward(input: (Output, Output))(implicit mode: Mode): Output = {
+    val labels = Tensor.ones(input._1.dataType, Shape(input._1.shape.asArray.last))
+    ops.NN.sigmoidCrossEntropy(input._1, labels, name = name) * (-1f)
   }
 }
 

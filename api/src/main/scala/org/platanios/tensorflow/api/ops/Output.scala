@@ -63,7 +63,7 @@ sealed trait OutputLike extends OutputConvertible {
 }
 
 /** Type trait for defining functions operating on and returning op outputs. */
-private[ops] trait OutputOps[T] {
+trait OutputOps[T] {
   /** Applies a unary function to the provided output and returns the result.
     *
     * @param  outputLike Output-like object to apply the unary function on.

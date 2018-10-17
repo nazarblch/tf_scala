@@ -181,6 +181,7 @@ class InMemoryEstimator[IT, IO, ID, IS, I, TT, TO, TD, TS, EI] private[estimator
         while (!session.shouldStop)
           try {
             session.run(targets = trainingOps.trainOp)
+            // session.deleteNativeReferences()
           } catch {
             case _: OutOfRangeException => session.setShouldStop(true)
           }
@@ -193,6 +194,10 @@ class InMemoryEstimator[IT, IO, ID, IS, I, TT, TO, TD, TS, EI] private[estimator
     }
     stopHook.updateCriteria(this.stopCriteria)
     session.addHooks(inferHooks ++ evaluateHooks)
+  }
+
+  def deleteSessionData(): Unit = {
+    session.deleteNativeReferences()
   }
 
   /** Infers output (i.e., computes predictions) for `input` using the model managed by this estimator.
@@ -263,6 +268,7 @@ class InMemoryEstimator[IT, IO, ID, IS, I, TT, TO, TD, TS, EI] private[estimator
           throw t
       }
     }
+    // session.deleteNativeReferences()
     stopHook.updateCriteria(stopCriteria)
     session.addHooks(currentTrainHooks ++ evaluateHooks)
     output
@@ -320,7 +326,7 @@ class InMemoryEstimator[IT, IO, ID, IS, I, TT, TO, TD, TS, EI] private[estimator
         val (step, metricValues) = {
           try {
             val step = session.run(fetches = globalStep.value).scalar.asInstanceOf[Long]
-            while (!session.shouldStop)
+            //while (!session.shouldStop)
               try {
                 session.run(targets = evaluationUpdateOps)
               } catch {

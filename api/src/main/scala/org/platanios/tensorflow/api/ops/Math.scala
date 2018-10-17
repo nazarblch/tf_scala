@@ -246,6 +246,10 @@ private[api] trait Math {
             .build().outputs(0))
   }
 
+  def l2norm(x: Output, name: String = "L2"): Output = {
+    sqrt(sum(square(x)))
+  }
+
   /** $OpDocMathSquare
     *
     * @group MathOps

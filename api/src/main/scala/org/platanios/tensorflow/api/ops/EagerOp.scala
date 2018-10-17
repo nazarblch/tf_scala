@@ -8,10 +8,13 @@ import org.platanios.tensorflow.api.{Tensor, types}
 import org.platanios.tensorflow.api.types.DataType
 import org.platanios.tensorflow.jni.ExecWithStatusCheck
 
-class EagerOp private (handle: TFE_Op) extends Pointer {
+class EagerOp private (op: TFE_Op) extends Pointer {
 
   def execute(): Tensor = {
-    val th: TFE_TensorHandle = ExecWithStatusCheck(s => TFE_Exec(handle, s))
+    val th: TFE_TensorHandle = eagerExecute(op)
+    // th.deallocate()
+    //TFE_DeleteOp(handle)
+    op.deallocate()
     Tensor.fromNativeHandle(th)
   }
 
@@ -45,8 +48,8 @@ object EagerOp {
       attributes += k -> v
     }
 
-    def build(): EagerOp = {
-      val op: TFE_Op = ExecWithStatusCheck(s => TFE_NewOp(opType, s))
+    def build(context: TFE_Context): EagerOp = {
+      val op: TFE_Op = new TFE_Op(opType, context)
 
       ExecWithStatusCheck(s => TFE_OpSetDevice(op, new BytePointer(device.get), s))
 

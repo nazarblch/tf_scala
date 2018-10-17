@@ -2,6 +2,7 @@ package native_types.core.framework;
 
 import org.bytedeco.javacpp.*;
 import org.bytedeco.javacpp.annotation.*;
+import native_types.core.framework.Tensor;
 
 import static native_types.data_types.CppDataTypes.DT_INT64;
 

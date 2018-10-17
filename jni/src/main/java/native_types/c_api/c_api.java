@@ -136,14 +136,14 @@ public class c_api {
         public native @Const Pointer data(); public native TF_Buffer data(Pointer data);
         public native @Cast("size_t") long length(); public native TF_Buffer length(long length);
         public static class Data_deallocator_Pointer_long extends FunctionPointer {
-            static { Loader.load(); }
             /** Pointer cast constructor. Invokes {@link Pointer#Pointer(Pointer)}. */
             public    Data_deallocator_Pointer_long(Pointer p) { super(p); }
             protected Data_deallocator_Pointer_long() { allocate(); }
             private native void allocate();
             public native void call(Pointer data, @Cast("size_t") long length);
         }
-        public native Data_deallocator_Pointer_long data_deallocator(); public native TF_Buffer data_deallocator(Data_deallocator_Pointer_long data_deallocator);
+        public native Data_deallocator_Pointer_long data_deallocator();
+        public native TF_Buffer data_deallocator(Data_deallocator_Pointer_long data_deallocator);
     }
 
     // Makes a copy of the input and sets an appropriate deallocator.  Useful for
@@ -176,10 +176,49 @@ public class c_api {
 //   facilitate this encoding.
 
     @Opaque public static class TF_Tensor extends Pointer {
+
+        protected static class DeleteDeallocator extends TF_Tensor implements Pointer.Deallocator {
+
+            DeleteDeallocator(TF_Tensor s) {super(s);}
+            @Override public void deallocate() {
+                if(!isNull()) {
+                    // System.out.println("delete TF_Tensor " + this);
+                    TF_DeleteTensor(this);
+                    setNull();
+                }
+            }
+        }
+
+
         /** Empty constructor. Calls {@code super((Pointer)null)}. */
-        public TF_Tensor() { super((Pointer)null); }
+        // public TF_Tensor() { super((Pointer)null); }
         /** Pointer cast constructor. Invokes {@link Pointer#Pointer(Pointer)}. */
         public TF_Tensor(Pointer p) { super(p); }
+
+        public TF_Tensor(int arg0, LongPointer dims, int num_dims, long len) {
+            super(TF_AllocateTensor(arg0, dims, num_dims, len));
+            deallocator(new DeleteDeallocator(this));
+        }
+        public TF_Tensor(int arg0, LongBuffer dims, int num_dims, long len) {
+            super(TF_AllocateTensor(arg0, dims, num_dims, len));
+            deallocator(new DeleteDeallocator(this));
+        }
+        public TF_Tensor(int arg0, long[] dims, int num_dims, long len) {
+            super(TF_AllocateTensor(arg0, dims, num_dims, len));
+            deallocator(new DeleteDeallocator(this));
+        }
+
+        public void setDeallocator() {
+            deallocator(new DeleteDeallocator(this));
+        }
+
+        @Override public void deallocate() {
+            Deallocator d = deallocator();
+            if(!isNull() && d!=null) {
+                super.deallocate();
+                setNull();
+            }
+        }
     }
 
     // Return a new tensor that holds the bytes data[0,len-1].
@@ -200,6 +239,9 @@ public class c_api {
         private native void allocate();
         public native void call(Pointer data, @Cast("size_t") long len, Pointer arg);
     }
+
+
+
     public static native TF_Tensor TF_NewTensor(
             @Cast("TF_DataType") int arg0, @Cast("const int64_t*") LongPointer dims, int num_dims, Pointer data, @Cast("size_t") long len,
             Deallocator_Pointer_long_Pointer deallocator,
@@ -222,13 +264,13 @@ public class c_api {
 //
 // The caller must set the Tensor values by writing them to the pointer returned
 // by TF_TensorData with length TF_TensorByteSize.
-    public static native TF_Tensor TF_AllocateTensor(@Cast("TF_DataType") int arg0,
+    private static native TF_Tensor TF_AllocateTensor(@Cast("TF_DataType") int arg0,
                                                      @Cast("const int64_t*") LongPointer dims,
                                                      int num_dims, @Cast("size_t") long len);
-    public static native TF_Tensor TF_AllocateTensor(@Cast("TF_DataType") int arg0,
+    private static native TF_Tensor TF_AllocateTensor(@Cast("TF_DataType") int arg0,
                                                      @Cast("const int64_t*") LongBuffer dims,
                                                      int num_dims, @Cast("size_t") long len);
-    public static native TF_Tensor TF_AllocateTensor(@Cast("TF_DataType") int arg0,
+    private static native TF_Tensor TF_AllocateTensor(@Cast("TF_DataType") int arg0,
                                                      @Cast("const int64_t*") long[] dims,
                                                      int num_dims, @Cast("size_t") long len);
 

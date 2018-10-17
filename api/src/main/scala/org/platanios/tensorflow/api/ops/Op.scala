@@ -833,7 +833,7 @@ object Op {
     * @tparam R Return type of the code block.
     * @return Return value of the code block.
     */
-  private[api] def createWith[R](
+  def createWith[R](
       graph: Graph = null,
       nameScope: String = null,
       device: String = "",
@@ -884,7 +884,7 @@ object Op {
     * @throws GraphMismatchException If any two of the values provided lie in different graphs.
     */
   @throws[GraphMismatchException]
-  private[api] def createWithNameScope[R](nameScope: String, values: Set[Op] = Set.empty[Op])(block: => R): R = {
+  def createWithNameScope[R](nameScope: String, values: Set[Op] = Set.empty[Op])(block: => R): R = {
     val scope = graphConstructionScope
     if (values.nonEmpty) {
       val newGraph: Graph = mergeGraph(getGraphFromInputs(values), scope.value)

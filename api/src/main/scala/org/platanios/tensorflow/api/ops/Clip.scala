@@ -55,7 +55,7 @@ private[ops] trait Clip {
   def clipByNorm(input: Output, clipNorm: Output, axes: Output = null, name: String = "ClipByNorm"): Output = {
     Op.createWithNameScope(name) {
       // Calculate the l2-norm and clip elements by the ratio of `clipNorm` to that l2-norm.
-      val l2Norm = Math.sum(input.square(), axes, keepDims = true).sqrt()
+      val l2Norm = Math.sum(input.square, axes, keepDims = true).sqrt
       val intermediate = input * clipNorm
       // Assert that the result shape is compatible with the initial shape, to prevent unintentional broadcasting.
       input.shape.assertIsCompatibleWith(intermediate.shape)

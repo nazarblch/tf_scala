@@ -17,6 +17,7 @@ package org.platanios.tensorflow.api.ops.training.optimizers
 
 import org.platanios.tensorflow.api.core.{Graph, Shape}
 import org.platanios.tensorflow.api.core.exception.InvalidDataTypeException
+import org.platanios.tensorflow.api.learn.{ClipGradients, NoClipGradients}
 import org.platanios.tensorflow.api.ops._
 import org.platanios.tensorflow.api.ops.control_flow.ControlFlow
 import org.platanios.tensorflow.api.ops.training.optimizers.Optimizer._
@@ -76,13 +77,16 @@ trait Optimizer {
       gradientsGatingMethod: Gradients.GatingMethod = Gradients.OpGating,
       gradientsAggregationMethod: Gradients.AggregationMethod = Gradients.AddAggregationMethod,
       colocateGradientsWithOps: Boolean = false,
+      clipGradients: ClipGradients = NoClipGradients,
       iteration: Option[Variable] = None,
       name: String = "Minimize"
   ): Op = {
     val gradientsAndVariables = computeGradients(
       loss, lossGradients, variables, gradientsGatingMethod, gradientsAggregationMethod, colocateGradientsWithOps)
-    applyGradients(gradientsAndVariables, iteration, name)
+    val clippedGradientsAndVariables = clipGradients(gradientsAndVariables)
+    applyGradients(clippedGradientsAndVariables, iteration, name)
   }
+
 
   /** Computes the gradients of `loss` with respect to the variables in `variables`, if provided, otherwise with respect
     * to all the trainable variables in the graph where `loss` is defined.

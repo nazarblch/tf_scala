@@ -34,6 +34,7 @@ object Math {
 
     val Cast   : layers.Cast.type    = layers.Cast
     val Sum    : layers.Sum.type     = layers.Sum
+    val SeqSum    : layers.SeqSum.type     = layers.SeqSum
     val Mean   : layers.Mean.type    = layers.Mean
     val AddBias: layers.AddBias.type = layers.AddBias
     val Linear : layers.Linear.type  = layers.Linear
@@ -60,8 +61,17 @@ case class Sum(override val name: String)
   }
 }
 
+case class SeqSum(override val name: String)
+  extends Layer[Seq[Output], Output](name) {
+  override val layerType: String = "SeqSum"
+
+  override protected def _forward(input: Seq[Output])(implicit mode: Mode): Output = {
+    input.reduce(_+_)
+  }
+}
+
 case class Mean(override val name: String)
-    extends Layer[Output, Output](name) {
+    extends OutputLayer[Output](name) {
   override val layerType: String = "Mean"
 
   override protected def _forward(input: Output)(implicit mode: Mode): Output = {
@@ -98,3 +108,5 @@ case class Linear(
       ops.NN.linear(input, weights.value)
   }
 }
+
+

@@ -86,9 +86,9 @@ object TensorFlow {
       Option(classLoader.getResourceAsStream(makeResourceName(LIB_NAME)))
           .map(extractResource(LIB_NAME, _, tempDirectory))
 
-      // System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow.so")
-      System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so")
-      System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so")
+      //System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow.so")
+      //System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so")
+      //System.load("/home/nazar/tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so")
 
       // Load the TensorFlow JNI bindings from the appropriate resource.
       val jniResourceStream = Option(classLoader.getResourceAsStream(makeResourceName(JNI_LIB_NAME)))

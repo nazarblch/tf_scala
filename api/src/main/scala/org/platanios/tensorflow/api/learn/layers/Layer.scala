@@ -15,6 +15,7 @@
 
 package org.platanios.tensorflow.api.learn.layers
 
+import org.platanios.tensorflow.api._
 import org.platanios.tensorflow.api.learn._
 import org.platanios.tensorflow.api.ops.variables.Variable.VariableGetter
 import org.platanios.tensorflow.api.ops.variables.VariableScope.maybeWrapCustomVariableGetter
@@ -60,7 +61,11 @@ abstract class Layer[T, R](
 
   def >>[S](other: Layer[R, S]): Compose[T, R, S] = compose(other)
 
-  def +(other: Layer[T, R]): Concatenate[T, R] = concatenate(other)
+  def >>[S](other: OutputLayer[R]): OutputLayer[T] = ComposeOutput(name, this, other)
+
+  def :+(other: Layer[T, R]): Concatenate[T, R] = concatenate(other)
+
+  def pair[T2, R2](other: Layer[T2, R2]): Concatenate12[T, R, T2, R2] = concatenate12(other)
 
   def ++(others: Seq[Layer[T, R]]): Concatenate[T, R] = concatenate(others: _*)
 
@@ -68,7 +73,26 @@ abstract class Layer[T, R](
 
   def concatenate(others: Layer[T, R]*): Concatenate[T, R] = Concatenate(name, this +: others)
 
+  def concatenate12[T2, R2](other: Layer[T2, R2]): Concatenate12[T, R, T2, R2] = Concatenate12(name, this, other)
+
   override def toString: String = layerType
+}
+
+abstract class OutputLayer[T](override val name: String) extends Layer[T, Output](name) {
+
+  private def superlayerType = layerType
+
+  private def super_forward(input: T)(implicit mode: Mode) = _forward(input)(mode)
+
+  def * (a: Output): OutputLayer[T] = new OutputLayer[T](name) {
+    override val layerType: String = superlayerType
+    override protected def _forward(input: T)(implicit mode: Mode): Output = super_forward(input)(mode) * a
+  }
+
+  def + (other: OutputLayer[T]): OutputLayer[T] = new OutputLayer[T](name) {
+    override val layerType: String = superlayerType
+    override protected def _forward(input: T)(implicit mode: Mode): Output = super_forward(input)(mode) + other.forward(input)(mode)
+  }
 }
 
 private[api] final case class LayerCreationContext(

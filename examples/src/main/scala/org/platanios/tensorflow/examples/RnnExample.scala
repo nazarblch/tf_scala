@@ -103,7 +103,7 @@ object RnnExample extends App {
   val model = {
     val input = tf.learn.Input(FLOAT32, Shape(-1, -1))
     val trainInput = tf.learn.Input(INT32, Shape(-1))
-
+    
     val layer = AddDim >> rnn >> RNNOutputLayer
     val loss = tf.learn.SparseSoftmaxCrossEntropy("Loss/CrossEntropy") >>
       tf.learn.Mean("Loss/Mean") >> tf.learn.ScalarSummary("Loss/Summary", "Loss")

@@ -2,6 +2,7 @@ package native_types.core.framework;
 
 import org.bytedeco.javacpp.*;
 import org.bytedeco.javacpp.annotation.*;
+import native_types.core.framework.Tensor;
 
 @Platform(include = {
         "/home/nazar/tensorflow_scala/jni/src/main/native/include/tensorflow/core/framework/tensor.h",

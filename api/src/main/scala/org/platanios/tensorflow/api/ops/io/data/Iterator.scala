@@ -20,8 +20,9 @@ import org.platanios.tensorflow.api.ops.{Op, Output}
 import org.platanios.tensorflow.api.ops.Gradients.{Registry => GradientsRegistry}
 import org.platanios.tensorflow.api.ops.io.data
 import org.platanios.tensorflow.api.types.DataType
-
 import com.typesafe.scalalogging.Logger
+import org.platanios.tensorflow.api.learn.layers.Input
+import org.platanios.tensorflow.api.tf
 import org.slf4j.LoggerFactory
 
 // TODO: Rename to "DatasetIterator".
@@ -105,6 +106,29 @@ class Iterator[T, O, D, S] private[io](
       outputShapes = flattenedOutputShapes,
       name = name)
     ev.unflattenOutputs(outputDataTypes, flattenedNext)
+  }
+
+  private def createPlaceholder(dataTypes: Any, shape: Any): (Option[_], Output) = {
+    dataTypes match {
+      case value: (_, DataType) =>
+        val dt = value._2
+        val sh = shape.asInstanceOf[(_, Shape)]
+        (Some(createPlaceholder(value._1, sh._1)), tf.placeholder(dt, sh._2))
+      case value: DataType =>
+        val sh = shape.asInstanceOf[Shape]
+        (None, tf.placeholder(value, sh))
+    }
+  }
+
+
+  def createPlaceholderSeq(): Seq[Output] = {
+    var pl:(Option[_], Output) = createPlaceholder(outputDataTypes, outputShapes)
+    var res = Seq(pl._2)
+    while (pl._1.isDefined) {
+      pl = pl._1.get.asInstanceOf[(Option[_], Output)]
+      res = Seq(pl._2) ++ res
+    }
+    res
   }
 
   // TODO: Add automatic disposal of iterators if necessary.

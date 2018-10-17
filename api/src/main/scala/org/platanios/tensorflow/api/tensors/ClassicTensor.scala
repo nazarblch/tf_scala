@@ -60,16 +60,6 @@ class ClassicTensor(nativeTensor: TF_Tensor,
                     protected val closeFn: () => Unit)
   extends Pointer {
 
-  protected class DeleteDeallocator private[tensors](val s: TF_Tensor) extends TF_Tensor(s) with Pointer.Deallocator {
-    override def deallocate(): Unit = {
-      if(!this.isNull) {
-        System.out.println("delete TF_Tensor")
-        TF_DeleteTensor(this)
-        setNull()
-      }
-    }
-  }
-
   /** Lock for the native handle. */
   private[api] object Lock
   private[api] def NativeHandleLock = Lock
@@ -217,14 +207,14 @@ object ClassicTensor {
 
   private[api] def fromNativeTensor(tf: TF_Tensor): ClassicTensor = {
 
+    tf.setDeallocator()
+
     val closeFn = () => {
-      // nativeHandleWrapper.Lock.synchronized {
-      if (!tf.isNull) {
-        TF_DeleteTensor(tf)
-        tf.setNull()
+      tf.synchronized {
+        tf.deallocate()
       }
-      //}
     }
+
 
     val tensor = new ClassicTensor(tf, closeFn)
     Disposer.add(tensor, closeFn)

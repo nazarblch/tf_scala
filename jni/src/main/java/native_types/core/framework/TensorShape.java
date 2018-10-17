@@ -3,6 +3,8 @@ package native_types.core.framework;
 import native_types.adapters.ArraySlice;
 import org.bytedeco.javacpp.*;
 import org.bytedeco.javacpp.annotation.*;
+import sun.java2d.Disposer;
+
 import java.nio.*;
 
 @Platform(include = {
@@ -31,7 +33,10 @@ import java.nio.*;
     private native void allocate(@Cast("tensorflow::int64*") @ArraySlice LongPointer dim_sizes);
     public TensorShape(@Cast("tensorflow::int64*") @ArraySlice LongBuffer dim_sizes) { super((Pointer)null); allocate(dim_sizes); }
     private native void allocate(@Cast("tensorflow::int64*") @ArraySlice LongBuffer dim_sizes);
-    public TensorShape(@Cast("tensorflow::int64*") @ArraySlice long... dim_sizes) { super((Pointer)null); allocate(dim_sizes); }
+    public TensorShape(@Cast("tensorflow::int64*") @ArraySlice long... dim_sizes) {
+        super((Pointer)null);
+        allocate(dim_sizes);
+    }
     private native void allocate(@Cast("tensorflow::int64*") @ArraySlice long... dim_sizes);
     public TensorShape() { super((Pointer)null); allocate(); }
     private native void allocate();
@@ -63,4 +68,5 @@ import java.nio.*;
      *  which case we pad the rest of the sizes with 1. */
     // These CHECK fail to ease debugging.
     // REQUIRES: dims() == NDIMS
+
 }
