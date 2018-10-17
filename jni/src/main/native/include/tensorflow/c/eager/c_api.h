@@ -351,7 +351,7 @@ TF_CAPI_EXPORT extern void TFE_OpSetAttrFunctionList(TFE_Op* op,
 TF_CAPI_EXPORT extern void TFE_Execute(TFE_Op* op, TFE_TensorHandle** retvals,
                                        int* num_retvals, TF_Status* status);
 
-TFE_TensorHandle* TFE_Exec(TFE_Op* op,  TF_Status* status) {
+inline TFE_TensorHandle* TFE_Exec(TFE_Op* op,  TF_Status* status) {
     const int num_outputs = 1;
     std::unique_ptr<TFE_TensorHandle* []> outputs(new TFE_TensorHandle* [num_outputs]);
     std::unique_ptr<int[]> actual_num_outputs(new int[1] {num_outputs});
@@ -362,7 +362,7 @@ TFE_TensorHandle* TFE_Exec(TFE_Op* op,  TF_Status* status) {
 
 
 
-TFE_Context* createContext() {
+inline TFE_Context* createContext() {
     TFE_ContextOptions* options = TFE_NewContextOptions();
     TFE_ContextOptionsSetAsync(options, 0);
     TF_Status* status = TF_NewStatus();
@@ -419,11 +419,11 @@ TFE_TensorHandle* TFE_NewTensorHandle(const tensorflow::Tensor& t);
 
 using namespace tensorflow;
 
-void TFE_OpSetAttrTypeInt(TFE_Op* op, const char* attr_name, int value) {
+inline void TFE_OpSetAttrTypeInt(TFE_Op* op, const char* attr_name, int value) {
   TFE_OpSetAttrType(op, attr_name, static_cast<TF_DataType>(value));
 }
 
-void deleteTensor(tensorflow::Tensor* t) {
+inline void deleteTensor(tensorflow::Tensor* t) {
    t->~Tensor();
 }
 
