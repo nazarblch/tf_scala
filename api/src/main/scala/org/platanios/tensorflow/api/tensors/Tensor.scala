@@ -54,7 +54,7 @@ import org.bytedeco.javacpp.indexer.{Indexer => JCPPIndexer}
   *
   * @author Emmanouil Antonios Platanios
   */
-sealed trait TensorLike {
+trait TensorLike {
   /** Data type of this tensor. */
   val dataType: DataType
 

@@ -5,7 +5,7 @@ import java.util.Random
 
 import org.platanios.tensorflow.api._
 import org.platanios.tensorflow.api.core.client.FeedMap
-import org.platanios.tensorflow.api.learn.layers.Discriminator
+import org.platanios.tensorflow.api.learn.layers.{Discriminator, InfoDiscriminator}
 import org.platanios.tensorflow.api.learn.models.GANModel
 import org.platanios.tensorflow.data.image.MNISTLoader
 import org.platanios.tensorflow.api.ops.NN.{CNNDataFormat, NWCFormat, SameConvPadding}
@@ -26,7 +26,7 @@ object GAN extends App {
   }
 
   def genData(from: Int, to: Int): Tensor = {
-    val n = dataSet.trainImages.shape(0)
+    val n = dataSet.trainImages.shape(0) - batch_size
     dataSet.trainImages.slice(from % n :: to % n).cast(FLOAT32)
   }
 
@@ -36,9 +36,9 @@ object GAN extends App {
 
 
   val model = {
-    val generator = tf.learn.Linear("Layer_1/Linear",  100) >> tf.learn.ReLU("Layer_1/ReLU", 0.1f) >>
-                    tf.learn.Linear("Layer_2/Linear",  100) >> tf.learn.ReLU("Layer_2/ReLU", 0.1f) >>
-                    tf.learn.Linear("Layer_3/Linear",  28 * 28) >> tf.learn.Reshape("reshape", Shape(batch_size, 28, 28, 1))
+    val generator = tf.learn.Linear("Layer_1/Linear",  256) >> tf.learn.ReLU("Layer_1/ReLU", 0.1f) >>
+                    //tf.learn.Linear("Layer_2/Linear",  256) >> tf.learn.ReLU("Layer_2/ReLU", 0.1f) >>
+                    tf.learn.Linear("Layer_3/Linear",  28 * 28) >> tf.learn.Sigmoid("Layer_3/Sigmoid") >> tf.learn.Reshape("reshape", Shape(batch_size, 28, 28, 1))
 
     val discriminator =
 //     tf.learn.Conv2D("Discriminator/Layer_0/Conv2D", Shape(4, 4, 1, 20), 2, 2, SameConvPadding) >>
@@ -49,13 +49,13 @@ object GAN extends App {
 //      tf.learn.AddBias("Discriminator/Bias_1" ) >>
 //      tf.learn.ReLU("Discriminator/Layer_1/ReLU" , 0.1f) >>
 //      tf.learn.MaxPool("Discriminator/Layer_1/MaxPool" , Seq(1, 2, 2, 1), 1, 1, SameConvPadding) >>
-      tf.learn.Flatten("Discriminator/Layer_3/Flatten" ) >>
+      tf.learn.Reshape("reshape", Shape(batch_size, 28 * 28)) >>
      // tf.learn.Dropout("Discriminator/Layer_3/Drop" , 0.5f) >>
-        tf.learn.Linear("Discriminator/Layer_2/Linear" , 100) >> tf.learn.ReLU("Discriminator/Layer_2/ReLU" , 0.1f) >>
-      tf.learn.Linear("Discriminator/Layer_3/Linear" , 100) >> tf.learn.ReLU("Discriminator/Layer_3/ReLU" , 0.1f) >>
-      tf.learn.Linear("Discriminator/OutputLayer/Linear" , 1)
+        tf.learn.Linear("Discriminator/Layer_2/Linear" , 256) >> tf.learn.ReLU("Discriminator/Layer_2/ReLU" , 0.1f) >>
+      // tf.learn.Linear("Discriminator/Layer_3/Linear" , 256) >> tf.learn.ReLU("Discriminator/Layer_3/ReLU" , 0.1f) >>
+      tf.learn.Linear("Discriminator/OutputLayer/Linear" , 1) >>  tf.learn.Sigmoid("OutputLayer/Sigmoid")
 
-    new GANModel(e, generator, x, Discriminator("Disc", discriminator), tf.train.Adam(0.0002), tf.learn.ClipGradientsByGlobalNorm(1.0f))
+    new GANModel(e, generator, x, InfoDiscriminator("Disc", discriminator), tf.train.Adam(0.001), tf.learn.ClipGradientsByGlobalNorm(10.0f))
   }
 
 
@@ -80,17 +80,19 @@ object GAN extends App {
 
 
     for(j <- 0 to 0) {
+      // session.run(feeds = feeds, targets = clipOp)
       session.run(feeds = feeds, targets = dOp)
-      session.run(feeds = feeds, targets = clipOp)
     }
-    session.run(feeds = feeds, targets = gOp)
+    for(j <- 0 to 0) {
+      session.run(feeds = feeds, targets = gOp)
+    }
     val res = session.run(feeds = feeds, fetches = Seq(model.getLossValue(), model.generate()))
 
-    println(res.head.scalar)
     val xg = res(1)
     // println(xg(1).summarize(28))
     if(i % 100 == 0) {
-      //VanillaGAN.plot(xb(0))
+      println(res.head.scalar)
+      VanillaGAN.plot(xg(0).reshape(Shape(28, 28)))
       //VanillaGAN.plot(xb(1))
     }
 

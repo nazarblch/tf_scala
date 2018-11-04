@@ -29,7 +29,8 @@ native_types/cc/client/* \
 native_types/utils/* \
 native_types/ops/* \
 native_types/c_api/c_api \
-native_types/c_api/eager/c_api
+native_types/c_api/eager/c_api \
+native_types/c_api/eager/tape_api
 
 #-properties linux-x86_64-cuda
 
